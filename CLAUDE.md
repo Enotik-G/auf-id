@@ -185,7 +185,7 @@ Remote: `https://github.com/Enotik-G/planchik.git`. Установлен `gh` CL
 - [ ] 13. Контракт для сервиса планирования (как он проверяет JWT и какие claims получает)
 - [ ] 14. Тесты безопасности
 
-Ещё не сделано из каркаса: **Testcontainers** и **GitHub Actions** (build + tests).
+Ещё не сделано из каркаса: **GitHub Actions** (build + tests). Testcontainers подключены: тесты с БД делают `@Import(TestcontainersConfiguration.class)` и поднимают свой чистый Postgres 18, локальный `docker compose` для тестов не нужен (но нужен запущенный Docker).
 
 ### Принципы безопасности (из документа)
 
@@ -208,4 +208,4 @@ Remote: `https://github.com/Enotik-G/planchik.git`. Установлен `gh` CL
 
 ### Следующий шаг
 
-2.6 — Java: готовы `EmailAddress`, `User`, `UserStatus`. Дальше — `UserRepository` + Testcontainers для интеграционного теста.
+2.6 — Java: готовы `EmailAddress`, `User`, `UserStatus`; тесты работают на Testcontainers. Дальше — `UserRepository` с интеграционным тестом.
