@@ -168,7 +168,7 @@ Remote: `https://github.com/Enotik-G/planchik.git`. Установлен `gh` CL
 - [ ] **2. Саморегистрация с подтверждением почты** ← **сейчас здесь**
   - [x] 2.1 Обновить `CLAUDE.md` под новое требование
   - [x] 2.2 Миграция: статус `PENDING_VERIFICATION` в `users` (новый changeset, заменяет `CHECK`)
-  - [ ] 2.3 Миграция: `password_credentials`
+  - [x] 2.3 Миграция: `password_credentials`
   - [ ] 2.4 Миграция: `one_time_tokens`
   - [ ] 2.5 Mailpit в `compose.yaml`
   - [ ] 2.6 Java: нормализация email → сущность и репозиторий → сервис регистрации → отправка письма → ручка подтверждения (по классу за шаг)
@@ -208,4 +208,4 @@ Remote: `https://github.com/Enotik-G/planchik.git`. Установлен `gh` CL
 
 ### Следующий шаг
 
-2.3 — миграция `password_credentials`.
+2.4 — миграция `one_time_tokens`.
