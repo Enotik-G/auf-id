@@ -63,7 +63,7 @@
 ## Локальный запуск
 
 ```bash
-docker compose up -d          # PostgreSQL 18 на localhost:5432
+docker compose up -d          # PostgreSQL 18 (localhost:5432) + Mailpit (SMTP localhost:1025, письма — http://localhost:8025)
 ./mvnw spring-boot:run        # приложение
 ```
 
@@ -170,7 +170,7 @@ Remote: `https://github.com/Enotik-G/planchik.git`. Установлен `gh` CL
   - [x] 2.2 Миграция: статус `PENDING_VERIFICATION` в `users` (новый changeset, заменяет `CHECK`)
   - [x] 2.3 Миграция: `password_credentials`
   - [x] 2.4 Миграция: `one_time_tokens`
-  - [ ] 2.5 Mailpit в `compose.yaml`
+  - [x] 2.5 Mailpit в `compose.yaml`
   - [ ] 2.6 Java: нормализация email → сущность и репозиторий → сервис регистрации → отправка письма → ручка подтверждения (по классу за шаг)
 - [ ] 3. Authorization Server (клиенты, PKCE, ES256, JWKS)
 - [ ] 4. Вход (Argon2id, rate limit через Bucket4j + Redis)
@@ -208,4 +208,4 @@ Remote: `https://github.com/Enotik-G/planchik.git`. Установлен `gh` CL
 
 ### Следующий шаг
 
-2.5 — Mailpit в `compose.yaml`.
+2.6 — Java: нормализация email (первый класс).
