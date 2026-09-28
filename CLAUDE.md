@@ -167,7 +167,7 @@ Remote: `https://github.com/Enotik-G/planchik.git`. Установлен `gh` CL
 - [ ] **1. Схема БД** — миграции: `users`, `password_credentials`, `totp_credentials`, `recovery_codes`, `roles`, `permissions`, `role_permissions`, `user_roles`, `user_sessions`, `invitations`, `one_time_tokens`, `consents`, `audit_events` + таблицы Spring Authorization Server. Таблицы добавляем по одной, по мере того как они нужны фиче, а не все разом. *(`users` готова — PR #2; остальные — в рамках задач, которым они нужны)*
 - [ ] **2. Саморегистрация с подтверждением почты** ← **сейчас здесь**
   - [x] 2.1 Обновить `CLAUDE.md` под новое требование
-  - [ ] 2.2 Миграция: статус `PENDING_VERIFICATION` в `users` (новый changeset, заменяет `CHECK`)
+  - [x] 2.2 Миграция: статус `PENDING_VERIFICATION` в `users` (новый changeset, заменяет `CHECK`)
   - [ ] 2.3 Миграция: `password_credentials`
   - [ ] 2.4 Миграция: `one_time_tokens`
   - [ ] 2.5 Mailpit в `compose.yaml`
@@ -208,4 +208,4 @@ Remote: `https://github.com/Enotik-G/planchik.git`. Установлен `gh` CL
 
 ### Следующий шаг
 
-2.2 — миграция со статусом `PENDING_VERIFICATION`.
+2.3 — миграция `password_credentials`.
