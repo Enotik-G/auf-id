@@ -208,4 +208,4 @@ Remote: `https://github.com/Enotik-G/planchik.git`. Установлен `gh` CL
 
 ### Следующий шаг
 
-2.6 — Java: готовы `EmailAddress`, `User`, `UserStatus`; тесты работают на Testcontainers. Дальше — `UserRepository` с интеграционным тестом.
+2.6 — Java: готовы `EmailAddress` (+ конвертер), `User`, `UserStatus`, `UserRepository`. Дальше — хеширование паролей (Spring Security, Argon2id) и сущность `PasswordCredential`.

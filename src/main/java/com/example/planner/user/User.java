@@ -25,7 +25,7 @@ public class User {
     private UUID id;
 
     @Column(nullable = false, unique = true, length = 254)
-    private String email;
+    private EmailAddress email;
 
     @Column(name = "full_name", nullable = false)
     private String fullName;
@@ -46,15 +46,11 @@ public class User {
     /** Новый пользователь, зарегистрировавшийся сам: почта ещё не подтверждена. */
     public static User selfRegistered(EmailAddress email, String fullName) {
         User user = new User();
-        user.email = email.value();
+        user.email = email;
         user.fullName = fullName;
         user.emailVerified = false;
         user.status = UserStatus.PENDING_VERIFICATION;
         user.createdAt = Instant.now();
         return user;
-    }
-
-    public EmailAddress getEmail() {
-        return new EmailAddress(email);
     }
 }
