@@ -208,4 +208,4 @@ Remote: `https://github.com/Enotik-G/planchik.git`. Установлен `gh` CL
 
 ### Следующий шаг
 
-2.6 — Java: нормализация email (первый класс).
+2.6 — Java: нормализация email готова (`user/EmailAddress`), дальше — сущность `User` и репозиторий.
