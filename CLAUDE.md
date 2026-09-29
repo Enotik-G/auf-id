@@ -183,7 +183,12 @@ Remote: `https://github.com/Enotik-G/planchik.git`. Установлен `gh` CL
   - [x] 2.4 Миграция: `one_time_tokens`
   - [x] 2.5 Mailpit в `compose.yaml`
   - [x] 2.6 Java: нормализация email → сущность и репозиторий → сервис регистрации → отправка письма → ручка подтверждения (по классу за шаг)
-- [ ] 3. Authorization Server (клиенты, PKCE, ES256, JWKS) — **после задачи 4**: токен выдаётся только вошедшему
+- [ ] **3. Authorization Server** (выдача JWT) ← **сейчас здесь**
+  - [x] 3.1 Spring Authorization Server подключён (`authserver/AuthorizationServerConfiguration` — своя цепочка фильтров `@Order(1)`, наша `SecurityConfiguration` — `@Order(2)`), OIDC, **временный** клиент `planner-dev` в `application.properties` (публичный, PKCE обязателен, access token 10 мин). Путь «authorize → код → token» работает; `sub` = id пользователя.
+  - [ ] 3.2 Ключ подписи **ES256 из переменной окружения**. Сейчас ключ RSA генерирует Spring Boot при каждом запуске: после перезапуска старые токены перестают проверяться, а у двух копий приложения были бы разные ключи.
+  - [ ] 3.3 Клиенты и выданные авторизации — в БД: миграция с таблицами Spring AS (`oauth2_registered_client`, `oauth2_authorization`, `oauth2_authorization_consent`), JDBC-репозитории; убрать клиента из properties. Секреты клиентов проверяются бином `PasswordEncoder` — это наш `PepperedPasswordEncoder` (Argon2 + перец), учесть при регистрации клиентов.
+  - [ ] 3.4 Свои поля в токене (`email`, `name`; `roles` — когда появятся роли) и `/userinfo`.
+  - [ ] 3.5 Ревью безопасности задачи 3.
 - [ ] **4. Вход** ← **сейчас здесь** (делаем раньше задачи 3)
   - [x] 4.1 Spring Security: правила доступа (`SecurityConfiguration`), CSRF в cookie
   - [x] 4.2 Вход по паролю: `UserDetailsService` (User + PasswordCredential, входят только `ACTIVE`) и `PasswordEncoder` поверх `PasswordHasher`
@@ -227,9 +232,9 @@ Remote: `https://github.com/Enotik-G/planchik.git`. Установлен `gh` CL
 
 ## Текущее состояние
 
-`master`: каркас (PR #1), `users` (PR #2), задача 2 — саморегистрация с подтверждением почты (PR #3–#7), задача 4 ч.1 — вход по паролю (PR #8).
+`master`: каркас (PR #1), `users` (PR #2), задача 2 — саморегистрация (PR #3–#7), задача 4 — вход и защита от подбора (PR #8, #9).
 
-Ветка **`feature/brute-force-protection`** — 4.4 целиком готова: Redis, лимиты по IP, ревью безопасности, капча ALTCHA после 3 неверных паролей к почте (вместо блокировки аккаунта). Осталось открыть PR.
+Ветка **`feature/authorization-server`** — задача 3, выдача JWT. Готово: 3.1.
 
 **Секреты локально — в `.env`** (в `.gitignore`): `PASSWORD_PEPPER` и `CAPTCHA_SECRET`, оба без умолчаний — без них приложение не стартует. **В тестах** секреты задаёт `src/test/resources/config/application.properties` (Spring Boot читает его поверх основного), в аннотациях тестов их не повторять.
 
@@ -247,6 +252,8 @@ Remote: `https://github.com/Enotik-G/planchik.git`. Установлен `gh` CL
 
 Заметки:
 
+- **События входа Spring (`AuthenticationSuccessEvent`, `…BadCredentialsEvent`) приходят не только от людей**, но и от сервисов-клиентов на `/oauth2/token` (имя — `client_id`, а не id пользователя). Слушатели в пакете `login` реагируют только на `UsernamePasswordAuthenticationToken`.
+- **Время входа (`auth_time` в id_token) Spring Security 7 берёт из `FactorGrantedAuthority`**, которую добавляет настоящий вход. В тестах сервера авторизации входить через форму (`formLogin()`), а не подделкой `user(...)`.
 - Время в коде — через бин `Clock` (`Instant.now(clock)`), а не `Instant.now()`: так в тестах можно подставить нужный момент (`Clock.fixed`).
 - Занятая почта при регистрации — молча ничего не делаем (защита от перебора «чья почта зарегистрирована»). Позже: письмо владельцу «кто-то пытался зарегистрироваться на ваш адрес» и повторная отправка письма подтверждения, если ссылка истекла.
 - Ответ 400 на ошибки валидации пока общий (`Invalid request content.`), без указания поля — доработать, когда появится фронтенд.
@@ -258,4 +265,4 @@ Remote: `https://github.com/Enotik-G/planchik.git`. Установлен `gh` CL
 
 ### Следующий шаг
 
-Виджет капчи проверен пользователем в браузере (2026-09-29): галочка появляется сама за доли секунды. Открыть PR «Защита от подбора пароля» (4.4 целиком), после merge — задача 3, Authorization Server (выдача JWT): после неё планировщик сможет подключиться (веха «Б»).
+3.2 — постоянный ключ подписи ES256 из переменной окружения (вместо RSA-ключа, который Spring Boot генерирует заново при каждом запуске).

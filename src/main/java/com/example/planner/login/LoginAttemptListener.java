@@ -5,6 +5,8 @@ import com.example.planner.user.InvalidEmailException;
 import com.example.planner.user.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.event.EventListener;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.authentication.event.AuthenticationFailureBadCredentialsEvent;
 import org.springframework.security.authentication.event.AuthenticationSuccessEvent;
 import org.springframework.stereotype.Component;
@@ -25,6 +27,9 @@ public class LoginAttemptListener {
      */
     @EventListener
     public void onBadCredentials(AuthenticationFailureBadCredentialsEvent event) {
+        if (!isPersonLogin(event.getAuthentication())) {
+            return;
+        }
         String enteredEmail = event.getAuthentication().getName();
         try {
             loginAttempts.recordFailure(new EmailAddress(enteredEmail));
@@ -35,9 +40,20 @@ public class LoginAttemptListener {
 
     @EventListener
     public void onSuccess(AuthenticationSuccessEvent event) {
+        if (!isPersonLogin(event.getAuthentication())) {
+            return;
+        }
         // После успешного входа имя — уже id пользователя (см. AccountUserDetailsService); по нему узнаём почту.
         UUID userId = UUID.fromString(event.getAuthentication().getName());
         userRepository.findById(userId)
                 .ifPresent(user -> loginAttempts.recordSuccess(user.getEmail()));
+    }
+
+    /**
+     * Вход человека по почте и паролю. Те же события Spring публикует и когда аутентифицируется
+     * сервис-клиент сервера авторизации (например, планировщик на /oauth2/token) — их не считаем.
+     */
+    private static boolean isPersonLogin(Authentication authentication) {
+        return authentication instanceof UsernamePasswordAuthenticationToken;
     }
 }
