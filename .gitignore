@@ -33,3 +33,6 @@ build/
 .vscode/
 
 .mcp.json
+
+### Локальные секреты (PASSWORD_PEPPER и т.п.) — никогда не коммитить ###
+.env

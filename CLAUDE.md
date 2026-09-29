@@ -64,7 +64,7 @@
 
 ```bash
 docker compose up -d          # PostgreSQL 18 (localhost:5432) + Mailpit (SMTP localhost:1025, письма — http://localhost:8025)
-PASSWORD_PEPPER=... ./mvnw spring-boot:run   # приложение (без PASSWORD_PEPPER не стартует)
+./mvnw spring-boot:run        # приложение (PASSWORD_PEPPER берётся из .env — см. ниже)
 ```
 
 Полезное:
@@ -91,8 +91,9 @@ docker compose down -v                                     # ⚠️ остано
 
 Секрет, который подмешивается к паролю перед Argon2id (`user/PasswordHasher`). **Умолчания нет намеренно**: без переменной приложение падает с `Could not resolve placeholder 'PASSWORD_PEPPER'`, короче 32 символов — отказывается стартовать. Так прод не сможет случайно запуститься с «учебным» перцем из репозитория.
 
-- Сгенерировать: `openssl rand -base64 48`.
-- Локально — один раз сгенерировать и сохранить (например, в Run Configuration IntelliJ → Environment variables). **Сменить перец = все существующие пароли перестанут подходить**, поэтому он постоянный для каждого окружения.
+- **Локально — файл `.env` в корне проекта** (в `.gitignore`, права `600`), его подхватывает `spring.config.import=optional:file:.env[.properties]` при любом способе запуска (IntelliJ, `./mvnw spring-boot:run`). Содержимое: `PASSWORD_PEPPER=<openssl rand -base64 48>`. На новой машине — создать заново.
+- На сервере `.env` нет → берётся переменная окружения; нет и её → приложение не стартует.
+- **Сменить перец = все существующие пароли перестанут подходить**, поэтому он постоянный для каждого окружения.
 - Тесты задают свой перец сами (`PlannerApplicationTests`, `PasswordHasherTest`), переменная им не нужна.
 
 ## Подводные камни (уже наступали)
