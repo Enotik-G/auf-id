@@ -56,8 +56,9 @@ public class RateLimitConfiguration {
     FilterRegistrationBean<RateLimitFilter> rateLimitFilter(RateLimiter rateLimiter) {
         FilterRegistrationBean<RateLimitFilter> registration = new FilterRegistrationBean<>(new RateLimitFilter(rateLimiter));
         registration.addUrlPatterns(RateLimitFilter.LOGIN_PATH, RateLimitFilter.REGISTRATION_PATH);
-        // Раньше Spring Security: лишняя попытка отклоняется до проверки пароля.
-        registration.setOrder(SecurityFilterProperties.DEFAULT_FILTER_ORDER - 1);
+        // Самый первый: раньше капчи (DEFAULT_FILTER_ORDER - 1) и Spring Security —
+        // лишняя попытка отклоняется до любой другой работы.
+        registration.setOrder(SecurityFilterProperties.DEFAULT_FILTER_ORDER - 2);
         return registration;
     }
 }

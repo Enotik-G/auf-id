@@ -189,7 +189,7 @@ Remote: `https://github.com/Enotik-G/planchik.git`. Установлен `gh` CL
   - [x] 4.2 Вход по паролю: `UserDetailsService` (User + PasswordCredential, входят только `ACTIVE`) и `PasswordEncoder` поверх `PasswordHasher`
   - [x] 4.3 Своя страница входа (Thymeleaf), «Вы вошли», выход; подсказка «подтвердите почту» — только при верном пароле
   - [x] 4.3б Записывать `users.last_login_at` при успешном входе (`LastLoginRecorder` слушает `AuthenticationSuccessEvent`)
-  - [ ] 4.4 Защита от подбора (отдельный PR). Решения пользователя (2026-09-29):
+  - [x] 4.4 Защита от подбора (отдельный PR). Решения пользователя (2026-09-29):
     - блокировка аккаунта (`LOCKED`) после **6** неудачных входов подряд, на **20 минут** (не навсегда — иначе чужой аккаунт можно заблокировать специально);
     - заблокированному **аккаунту** — общее «Неверная почта или пароль» (не выдаём, что аккаунт существует); превышен лимит **по IP** — «Слишком много попыток, попробуйте позже»;
     - лимиты по IP: **20 попыток входа в минуту**, **5 регистраций в час**;
@@ -198,13 +198,13 @@ Remote: `https://github.com/Enotik-G/planchik.git`. Установлен `gh` CL
     - [x] 4.4.2 Блокировка аккаунта после 6 неудач (`LoginAttemptService` — ключи `login:failures:<id>` и `login:locked:<id>` с TTL 20 мин; `LoginAttemptListener` слушает события входа; `accountLocked` в `AccountUserDetailsService`)
     - [x] 4.4.3 Лимиты по IP (пакет `ratelimit`: `RateLimit` — сами лимиты, `RateLimiter` — Bucket4j поверх Redis, `RateLimitFilter` — перед Spring Security; `POST /login` → `/login?tooManyAttempts`, `POST /api/v1/registrations` → `429` + `Retry-After`)
     - [x] 4.4.4 Ревью безопасности задачи 4 целиком. Исправлено: лимит по IP для IPv6 считается по сети /64 (`RateLimitFilter.clientKey`); cookie сессии `SameSite=Lax`, `Secure` через `SESSION_COOKIE_SECURE`. Проверено и в порядке: перебор почт закрыт везде, CSRF на всех формах, выход только POST, `X-Frame-Options: DENY`, длинный пароль не нагружает Argon2 (HMAC перед ним). **Опасение про «заблокированный отвечает быстрее» не подтвердилось:** Spring Security 7 при отказе на pre-check всё равно проверяет пароль (`alwaysPerformAdditionalChecksOnUser`), закреплено `LoginConfigurationTest`.
-    - [ ] 4.4.5 **Капча вместо блокировки аккаунта.** Решение пользователя (2026-09-29), отменяет блокировку из 4.4.2: блокировка позволяла держать **чужой** аккаунт закрытым (6 неверных паролей раз в 20 минут). Теперь:
+    - [x] 4.4.5 **Капча вместо блокировки аккаунта.** Решение пользователя (2026-09-29), отменяет блокировку из 4.4.2: блокировка позволяла держать **чужой** аккаунт закрытым (6 неверных паролей раз в 20 минут). Теперь:
       - капча — **ALTCHA** (open-source, proof-of-work, работает на нашем сервере; данные пользователей никуда не уходят — проще с 152-ФЗ);
       - после **3** неверных паролей подряд вход в этот аккаунт требует решённую капчу; аккаунт **не блокируется**;
       - счётчик неудач (`LoginAttemptService`, Redis) остаётся, ключ `login:locked:*` и `accountLocked` по Redis — убрать;
       - требование капчи не должно выдавать, существует ли аккаунт (для несуществующей почты — вести себя так же).
       - [x] 4.4.5а Счётчик неудач — **по введённой почте** (ключ `login:failures:<sha256 почты>`, почта в Redis не лежит открытым текстом), помнится **сутки** после последней неудачи, удачный вход обнуляет; блокировка аккаунта по Redis убрана (`accountLocked` — только статус `LOCKED` в БД, на будущее для админа). `LoginAttemptService.isCaptchaRequired(email)`.
-      - [ ] 4.4.5б ALTCHA: виджет на странице входа, выдача задачки (challenge) и проверка решения на сервере, защита от повторного использования решения (Redis).
+      - [x] 4.4.5б ALTCHA: пакет `captcha` (`CaptchaService` — задачка PBKDF2/SHA-256, подпись HMAC секретом `CAPTCHA_SECRET`, живёт 10 мин, решение одноразовое — ключ `captcha:used:<подпись>` в Redis; `GET /captcha/challenge`), `LoginCaptchaFilter` на `POST /login` (после лимита по IP, перед Spring Security) → `/login?captcha`. Виджет — `static/js/altcha-3.2.3.i18n.min.js` (MIT), на странице входа **всегда**, решается сам (`auto="onload"`), чтобы его появление не выдавало, что к почте подбирали пароль. Без JavaScript после 3 неудач войти нельзя — осознанно.
 - [ ] 5. Приглашения (импорт CSV → письма → установка пароля)
 - [ ] 6. Сброс пароля
 - [ ] 7. Refresh-токены (ротация + reuse detection)
@@ -229,11 +229,9 @@ Remote: `https://github.com/Enotik-G/planchik.git`. Установлен `gh` CL
 
 `master`: каркас (PR #1), `users` (PR #2), задача 2 — саморегистрация с подтверждением почты (PR #3–#7), задача 4 ч.1 — вход по паролю (PR #8).
 
-Ветка **`feature/brute-force-protection`** — 4.4, защита от подбора пароля. Готово: 4.4.1 — Redis; 4.4.2 — блокировка (заменена капчей в 4.4.5а); 4.4.3 — лимиты по IP; 4.4.4 — ревью; 4.4.5а — счётчик неудач по почте.
+Ветка **`feature/brute-force-protection`** — 4.4 целиком готова: Redis, лимиты по IP, ревью безопасности, капча ALTCHA после 3 неверных паролей к почте (вместо блокировки аккаунта). Осталось открыть PR.
 
-Сбросить локально: счётчики неудач — ключи `login:failures:*`, лимиты по IP — `rate:*` (`docker compose exec redis redis-cli --scan --pattern 'rate:*' | xargs docker compose exec -T redis redis-cli DEL`).
-
-Тесты с полным приложением чистят Redis в `@AfterEach` (`flushAll`) — иначе блокировки и лимиты перетекают между тестами (все запросы MockMvc идут с 127.0.0.1).
+**Секреты локально — в `.env`** (в `.gitignore`): `PASSWORD_PEPPER` и `CAPTCHA_SECRET`, оба без умолчаний — без них приложение не стартует. **В тестах** секреты задаёт `src/test/resources/config/application.properties` (Spring Boot читает его поверх основного), в аннотациях тестов их не повторять.
 
 Вход (пакет `login`): `AccountUserDetailsService` (ищет по почте, входят только `ACTIVE`), `PepperedPasswordEncoder` (переходник Spring Security → `PasswordHasher`), `LoginConfiguration` (свой `DaoAuthenticationProvider`: «не подтверждена» проверяется **после** пароля, «заблокирован» — **до**), страницы `/login` (`?error`, `?unconfirmed`, `?logout`) и `/`, `LastLoginRecorder`. Общий стиль — `static/css/auth.css`.
 
@@ -260,4 +258,6 @@ Remote: `https://github.com/Enotik-G/planchik.git`. Установлен `gh` CL
 
 ### Следующий шаг
 
-4.4.5б — ALTCHA (`org.altcha:altcha` для сервера, виджет `altcha` — JS-файл кладём к себе в `static/`, без CDN). После 3 неудач к почте `POST /login` без верного решения капчи → `/login?captcha`, страница показывает виджет. Затем PR «Защита от подбора пароля».
+1. Пользователь проверяет виджет капчи в настоящем браузере (Claude проверил сервер, но не сам виджет): http://localhost:8080/login — под формой галочка должна появиться сама за ~1 с.
+2. PR «Защита от подбора пароля» (4.4 целиком).
+3. Затем задача 3 — Authorization Server (выдача JWT): после неё планировщик сможет подключиться (веха «Б»).

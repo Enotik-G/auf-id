@@ -30,8 +30,10 @@ public class SecurityConfiguration {
                         // Страница входа — со всеми вариантами адреса (?error, ?unconfirmed, ?logout):
                         // permitAll() у formLogin открывает только адрес /login без параметров.
                         .requestMatchers("/login").permitAll()
-                        // Стили страниц.
-                        .requestMatchers("/css/**").permitAll()
+                        // Стили и скрипты страниц (виджет капчи).
+                        .requestMatchers("/css/**", "/js/**").permitAll()
+                        // Задачка капчи — её запрашивает страница входа, то есть ещё не вошедший человек.
+                        .requestMatchers(HttpMethod.GET, "/captcha/challenge").permitAll()
                         // Документация API.
                         .requestMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
                         // Страница ошибок Spring: без этого любая ошибка превращалась бы в 401.

@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Вход</title>
     <link rel="stylesheet" th:href="@{/css/auth.css}">
+    <!-- Виджет капчи ALTCHA 3.2.3 (MIT, см. altcha-3.2.3.LICENSE.txt) — лежит у нас, без внешних CDN. -->
+    <script type="module" th:src="@{/js/altcha-3.2.3.i18n.min.js}"></script>
 </head>
 <body>
 <main class="card">
@@ -17,6 +19,9 @@
     <div class="message error" th:if="${param.tooManyAttempts}">
         Слишком много попыток входа с вашего адреса. Подождите минуту и попробуйте снова.
     </div>
+    <div class="message error" th:if="${param.captcha}">
+        Подтвердите, что вы не робот: дождитесь галочки под формой и войдите снова.
+    </div>
     <div class="message info" th:if="${param.logout}">Вы вышли из аккаунта.</div>
 
     <form method="post" th:action="@{/login}">
@@ -25,6 +30,14 @@
 
         <label for="password">Пароль</label>
         <input id="password" name="password" type="password" autocomplete="current-password" required>
+
+        <!--
+            Капча на странице всегда и решается сама, пока человек вводит пароль (auto="onload").
+            Сервер требует её только после 3 неверных паролей к почте, но показываем всегда:
+            иначе по появлению виджета можно было бы понять, что к почте уже подбирали пароль.
+        -->
+        <altcha-widget th:attr="challenge=@{/captcha/challenge}" name="altcha" auto="onload" language="ru"
+                       class="captcha"></altcha-widget>
 
         <button type="submit">Войти</button>
     </form>

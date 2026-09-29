@@ -1,5 +1,8 @@
 package com.example.planner.login;
 
+import com.example.planner.captcha.CaptchaService;
+import org.springframework.boot.security.autoconfigure.web.servlet.SecurityFilterProperties;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.DisabledException;
@@ -39,5 +42,16 @@ public class LoginConfiguration {
             }
         });
         return provider;
+    }
+
+    @Bean
+    FilterRegistrationBean<LoginCaptchaFilter> loginCaptchaFilter(LoginAttemptService loginAttempts,
+                                                                 CaptchaService captchaService) {
+        FilterRegistrationBean<LoginCaptchaFilter> registration =
+                new FilterRegistrationBean<>(new LoginCaptchaFilter(loginAttempts, captchaService));
+        registration.addUrlPatterns(LoginCaptchaFilter.LOGIN_PATH);
+        // После лимита по IP (он первый, SecurityFilterProperties.DEFAULT_FILTER_ORDER - 2) и перед Spring Security.
+        registration.setOrder(SecurityFilterProperties.DEFAULT_FILTER_ORDER - 1);
+        return registration;
     }
 }

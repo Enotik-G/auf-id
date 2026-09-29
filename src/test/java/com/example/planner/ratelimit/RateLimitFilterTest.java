@@ -23,7 +23,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /** Лимиты по IP на настоящих запросах ко всему приложению. MockMvc отправляет запросы с адреса 127.0.0.1. */
-@SpringBootTest(properties = "auth.password.pepper=test-pepper-only-for-tests-0123456789")
+@SpringBootTest
 @AutoConfigureMockMvc
 @Import(TestcontainersConfiguration.class)
 class RateLimitFilterTest {
@@ -45,11 +45,12 @@ class RateLimitFilterTest {
     @Test
     void twentyFirstLoginAttemptInAMinuteIsRejectedBeforePasswordCheck() throws Exception {
         for (int i = 0; i < 20; i++) {
-            mockMvc.perform(formLogin().user("nobody@mail.ru").password("guess " + i))
+            // Каждый раз новая почта: здесь проверяем лимит по IP, а не капчу по почте.
+            mockMvc.perform(formLogin().user("guess" + i + "@mail.ru").password("guess " + i))
                     .andExpect(redirectedUrl("/login?error"));
         }
 
-        mockMvc.perform(formLogin().user("nobody@mail.ru").password("guess 21"))
+        mockMvc.perform(formLogin().user("guess21@mail.ru").password("guess 21"))
                 .andExpect(redirectedUrl("/login?tooManyAttempts"))
                 .andExpect(header().exists("Retry-After"));
     }
