@@ -41,6 +41,8 @@ public class AccountUserDetailsService implements UserDetailsService {
                 .withUsername(user.getId().toString())
                 .password(credential.getPasswordHash())
                 .disabled(user.getStatus() != UserStatus.ACTIVE && user.getStatus() != UserStatus.LOCKED)
+                // Статус LOCKED в БД — на будущее, ставит администратор. От подбора пароля защищает
+                // не блокировка, а капча (LoginAttemptService) — чужой аккаунт так не заблокировать.
                 .accountLocked(user.getStatus() == UserStatus.LOCKED)
                 .build();
     }

@@ -15,6 +15,7 @@
     <description>planner</description>
     <properties>
         <java.version>25</java.version>
+        <bucket4j.version>8.20.0</bucket4j.version>
     </properties>
     <dependencies>
         <dependency>
@@ -84,6 +85,32 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- Капча ALTCHA (proof-of-work) — серверная часть. Виджет для браузера лежит в static/js. -->
+        <dependency>
+            <groupId>org.altcha</groupId>
+            <artifactId>altcha</artifactId>
+            <version>2.0.3</version>
+        </dependency>
+        <!-- Лимиты запросов по IP (token bucket), состояние — в Redis. Spring Boot версию не задаёт. -->
+        <dependency>
+            <groupId>com.bucket4j</groupId>
+            <artifactId>bucket4j_jdk17-core</artifactId>
+            <version>${bucket4j.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.bucket4j</groupId>
+            <artifactId>bucket4j_jdk17-lettuce</artifactId>
+            <version>${bucket4j.version}</version>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>

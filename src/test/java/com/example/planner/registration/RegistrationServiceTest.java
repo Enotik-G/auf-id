@@ -22,7 +22,7 @@ import org.springframework.test.context.event.RecordApplicationEvents;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-@DataJpaTest(properties = "auth.password.pepper=test-pepper-only-for-tests-0123456789")
+@DataJpaTest
 @Import({TestcontainersConfiguration.class, ClockConfiguration.class,
         RegistrationService.class, OneTimeTokenService.class, PasswordHasher.class})
 @RecordApplicationEvents

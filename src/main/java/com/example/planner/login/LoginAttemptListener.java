@@ -1,0 +1,43 @@
+package com.example.planner.login;
+
+import com.example.planner.user.EmailAddress;
+import com.example.planner.user.InvalidEmailException;
+import com.example.planner.user.UserRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.context.event.EventListener;
+import org.springframework.security.authentication.event.AuthenticationFailureBadCredentialsEvent;
+import org.springframework.security.authentication.event.AuthenticationSuccessEvent;
+import org.springframework.stereotype.Component;
+
+import java.util.UUID;
+
+/** Передаёт результаты входа в {@link LoginAttemptService}. */
+@Component
+@RequiredArgsConstructor
+public class LoginAttemptListener {
+
+    private final LoginAttemptService loginAttempts;
+    private final UserRepository userRepository;
+
+    /**
+     * Неверный пароль или несуществующая почта — Spring намеренно их не различает, и мы тоже:
+     * считаем неудачу по введённой почте в обоих случаях.
+     */
+    @EventListener
+    public void onBadCredentials(AuthenticationFailureBadCredentialsEvent event) {
+        String enteredEmail = event.getAuthentication().getName();
+        try {
+            loginAttempts.recordFailure(new EmailAddress(enteredEmail));
+        } catch (InvalidEmailException ignored) {
+            // Мусор вместо почты — такой адрес не зарегистрировать, считать нечего.
+        }
+    }
+
+    @EventListener
+    public void onSuccess(AuthenticationSuccessEvent event) {
+        // После успешного входа имя — уже id пользователя (см. AccountUserDetailsService); по нему узнаём почту.
+        UUID userId = UUID.fromString(event.getAuthentication().getName());
+        userRepository.findById(userId)
+                .ifPresent(user -> loginAttempts.recordSuccess(user.getEmail()));
+    }
+}
