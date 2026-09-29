@@ -1,9 +1,11 @@
 package com.example.planner.registration;
 
+import com.example.planner.SecurityConfiguration;
 import com.example.planner.user.EmailAddress;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -19,6 +21,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(RegistrationController.class)
+@Import(SecurityConfiguration.class)
 class RegistrationControllerTest {
 
     @Autowired

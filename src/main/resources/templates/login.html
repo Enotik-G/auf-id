@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Вход</title>
+    <link rel="stylesheet" th:href="@{/css/auth.css}">
+</head>
+<body>
+<main class="card">
+    <h1>Вход</h1>
+
+    <div class="message error" th:if="${param.error}">Неверная почта или пароль.</div>
+    <div class="message error" th:if="${param.unconfirmed}">
+        Почта ещё не подтверждена. Перейдите по ссылке из письма, которое пришло после регистрации.
+    </div>
+    <div class="message info" th:if="${param.logout}">Вы вышли из аккаунта.</div>
+
+    <form method="post" th:action="@{/login}">
+        <label for="username">Почта</label>
+        <input id="username" name="username" type="email" autocomplete="username" required autofocus>
+
+        <label for="password">Пароль</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required>
+
+        <button type="submit">Войти</button>
+    </form>
+</main>
+</body>
+</html>
