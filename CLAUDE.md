@@ -204,11 +204,11 @@ Remote: `https://github.com/Enotik-G/planchik.git`. Установлен `gh` CL
 
 ## Текущее состояние
 
-`master`: каркас (PR #1), `users` (PR #2), фундамент регистрации (PR #3), пароль и одноразовые токены (PR #4).
+`master`: каркас (PR #1), `users` (PR #2), фундамент регистрации (PR #3), пароль и одноразовые токены (PR #4), письмо подтверждения + `RegistrationService` (PR #5).
 
-Ветка **`feature/verification-email`** — задача 2: письмо «подтвердите почту» и дальше сам процесс регистрации.
+Ветка **`feature/registration-api`** — задача 2: ручка `POST /api/v1/registrations` (`RegistrationController`, `RegistrationRequest`, `InvalidEmailException`) и описание API в Swagger.
 
-Готово в ветке: `spring-boot-starter-mail` → Mailpit; пакет `registration`: `VerificationEmailSender` (ссылка `<auth.public-url>/verify-email?token=...`), `RegistrationService.register` — пользователь + пароль + токен, письмо уходит через событие `VerificationEmailRequested` **после коммита** (`@TransactionalEventListener(AFTER_COMMIT)`).
+**Swagger UI:** http://localhost:8080/swagger-ui/index.html (JSON — `/v3/api-docs`). Заголовок и описание API — `OpenApiConfiguration`; каждую новую ручку описываем `@Tag` / `@Operation` / `@ApiResponse`, поля DTO — `@Schema(description, example)`. На сервере можно выключить: `SPRINGDOC_API_DOCS_ENABLED=false`, `SPRINGDOC_SWAGGER_UI_ENABLED=false`.
 
 Настройки почты (`application.properties`, всё с локальными умолчаниями): `MAIL_HOST`, `MAIL_PORT`, `MAIL_FROM`, `AUTH_PUBLIC_URL`.
 
@@ -218,8 +218,9 @@ Remote: `https://github.com/Enotik-G/planchik.git`. Установлен `gh` CL
 - Приглашённые (`INVITED`) и самостоятельно зарегистрированные (`PENDING_VERIFICATION`) — разные статусы: у них разный путь к `ACTIVE`.
 - Время в коде — через бин `Clock` (`Instant.now(clock)`), а не `Instant.now()`: так в тестах можно подставить нужный момент (`Clock.fixed`).
 - Занятая почта при регистрации — молча ничего не делаем (защита от перебора «чья почта зарегистрирована»). Позже: письмо владельцу «кто-то пытался зарегистрироваться на ваш адрес» и повторная отправка письма подтверждения, если ссылка истекла.
+- Ответ 400 на ошибки валидации пока общий (`Invalid request content.`), без указания поля — доработать, когда появится фронтенд.
 - Гонка при регистрации одной почты: `existsByEmail` пройдут оба запроса, второго остановит `users_email_key` → `DataIntegrityViolationException`. Сервис должен это обработать.
 
 ### Следующий шаг
 
-HTTP-ручка регистрации `POST /api/v1/registrations`: DTO с валидацией (ФИО не пустое, пароль ≥ 8 символов), вызов `RegistrationService`, одинаковый ответ `202` для новой и занятой почты (в т.ч. при `DataIntegrityViolationException` от гонки).
+Открыть PR «Регистрация через API с письмом подтверждения». Затем новая ветка: ручка `GET /verify-email?token=...` — гасит токен `EMAIL_VERIFY`, пользователь → `ACTIVE`, `email_verified = true`.
