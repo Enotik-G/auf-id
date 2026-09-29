@@ -208,14 +208,15 @@ Remote: `https://github.com/Enotik-G/planchik.git`. Установлен `gh` CL
 
 Ветка **`feature/registration-flow`** — задача 2, сам процесс регистрации: сервис, письмо, ручки.
 
-Готово в ветке: `PasswordCredential` + репозиторий; пакет `onetimetoken`: `OneTimeToken`, `TokenPurpose`, репозиторий.
+Готово в ветке: `PasswordCredential` + репозиторий; пакет `onetimetoken`: `OneTimeToken`, `TokenPurpose` (со сроками жизни), репозиторий, `OneTimeTokenService` (issue/consume); `ClockConfiguration` — бин `Clock`.
 
 Заметки к задаче:
 
 - `full_name` в `users` — `NOT NULL`, значит ФИО спрашиваем прямо в форме регистрации.
 - Приглашённые (`INVITED`) и самостоятельно зарегистрированные (`PENDING_VERIFICATION`) — разные статусы: у них разный путь к `ACTIVE`.
+- Время в коде — через бин `Clock` (`Instant.now(clock)`), а не `Instant.now()`: так в тестах можно подставить нужный момент (`Clock.fixed`).
 - Гонка при регистрации одной почты: `existsByEmail` пройдут оба запроса, второго остановит `users_email_key` → `DataIntegrityViolationException`. Сервис должен это обработать.
 
 ### Следующий шаг
 
-`OneTimeTokenService`: выдать токен (случайные 32 байта → в БД SHA-256, наружу — сам токен) и погасить токен (найти по хешу и назначению, проверить срок и `used_at`).
+Отправка письма: `spring-boot-starter-mail` → Mailpit, класс, который шлёт письмо «подтвердите почту» со ссылкой.

@@ -9,12 +9,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
 import org.springframework.context.annotation.Import;
-import org.springframework.dao.DataIntegrityViolationException;
 
 import java.time.Duration;
+import java.time.Instant;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @DataJpaTest
 @Import(TestcontainersConfiguration.class)
@@ -34,7 +33,7 @@ class OneTimeTokenRepositoryTest {
     @Test
     void savesTokenAndFindsItByHashAndPurpose() {
         User user = saveUser();
-        tokenRepository.save(OneTimeToken.issue(user, TokenPurpose.EMAIL_VERIFY, HASH, Duration.ofHours(24)));
+        tokenRepository.save(OneTimeToken.issue(user, TokenPurpose.EMAIL_VERIFY, HASH, Instant.now()));
         entityManager.flush();
         entityManager.clear();
 
@@ -48,18 +47,9 @@ class OneTimeTokenRepositoryTest {
     @Test
     void tokenOfOnePurposeIsNotFoundForAnother() {
         User user = saveUser();
-        tokenRepository.saveAndFlush(OneTimeToken.issue(user, TokenPurpose.EMAIL_VERIFY, HASH, Duration.ofHours(24)));
+        tokenRepository.saveAndFlush(OneTimeToken.issue(user, TokenPurpose.EMAIL_VERIFY, HASH, Instant.now()));
 
         assertThat(tokenRepository.findByTokenHashAndPurpose(HASH, TokenPurpose.PASSWORD_RESET)).isEmpty();
-    }
-
-    @Test
-    void rejectsTokenThatExpiresBeforeItIsCreated() {
-        User user = saveUser();
-        OneTimeToken expired = OneTimeToken.issue(user, TokenPurpose.EMAIL_VERIFY, HASH, Duration.ofHours(-1));
-
-        assertThatThrownBy(() -> tokenRepository.saveAndFlush(expired))
-                .isInstanceOf(DataIntegrityViolationException.class);
     }
 
     private User saveUser() {

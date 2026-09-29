@@ -15,7 +15,6 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.UuidGenerator;
 
-import java.time.Duration;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -50,13 +49,23 @@ public class OneTimeToken {
     @Column(name = "used_at")
     private Instant usedAt;
 
-    public static OneTimeToken issue(User user, TokenPurpose purpose, String tokenHash, Duration lifetime) {
+    public static OneTimeToken issue(User user, TokenPurpose purpose, String tokenHash, Instant now) {
         OneTimeToken token = new OneTimeToken();
         token.user = user;
         token.purpose = purpose;
         token.tokenHash = tokenHash;
-        token.createdAt = Instant.now();
-        token.expiresAt = token.createdAt.plus(lifetime);
+        token.createdAt = now;
+        token.expiresAt = now.plus(purpose.lifetime());
         return token;
+    }
+
+    /** Погасить токен. Второй раз или после истечения срока — нельзя. */
+    void markUsed(Instant now) {
+        boolean alreadyUsed = usedAt != null;
+        boolean expired = !now.isBefore(expiresAt);
+        if (alreadyUsed || expired) {
+            throw new InvalidOneTimeTokenException();
+        }
+        usedAt = now;
     }
 }
