@@ -1,9 +1,11 @@
 package com.example.planner.registration;
 
+import com.example.planner.SecurityConfiguration;
 import com.example.planner.onetimetoken.InvalidOneTimeTokenException;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -18,6 +20,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(EmailVerificationController.class)
+@Import(SecurityConfiguration.class)
 class EmailVerificationControllerTest {
 
     @Autowired

@@ -1,15 +1,18 @@
 package com.example.planner.registration;
 
+import com.example.planner.SecurityConfiguration;
 import com.example.planner.onetimetoken.InvalidOneTimeTokenException;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
 import static org.mockito.Mockito.doThrow;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -19,6 +22,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(VerifyEmailPageController.class)
+@Import(SecurityConfiguration.class)
 class VerifyEmailPageControllerTest {
 
     @Autowired
@@ -46,7 +50,7 @@ class VerifyEmailPageControllerTest {
 
     @Test
     void pressingButtonConfirmsAndRedirectsToSuccess() throws Exception {
-        mockMvc.perform(post("/verify-email").param("token", "abc_DEF-123"))
+        mockMvc.perform(post("/verify-email").param("token", "abc_DEF-123").with(csrf()))
                 .andExpect(status().is3xxRedirection())
                 .andExpect(redirectedUrl("/verify-email/done"));
 
@@ -54,10 +58,24 @@ class VerifyEmailPageControllerTest {
     }
 
     @Test
+    void buttonPressWithoutCsrfTokenIsRejected() throws Exception {
+        mockMvc.perform(post("/verify-email").param("token", "abc_DEF-123"))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(registrationService);
+    }
+
+    @Test
+    void confirmFormContainsCsrfToken() throws Exception {
+        mockMvc.perform(get("/verify-email").param("token", "abc_DEF-123"))
+                .andExpect(content().string(containsString("name=\"_csrf\"")));
+    }
+
+    @Test
     void usedTokenShowsInvalidPage() throws Exception {
         doThrow(new InvalidOneTimeTokenException()).when(registrationService).confirmEmail("used-token");
 
-        mockMvc.perform(post("/verify-email").param("token", "used-token"))
+        mockMvc.perform(post("/verify-email").param("token", "used-token").with(csrf()))
                 .andExpect(status().isOk())
                 .andExpect(content().string(containsString("Ссылка недействительна")));
     }

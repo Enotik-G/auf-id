@@ -174,15 +174,19 @@ Remote: `https://github.com/Enotik-G/planchik.git`. Установлен `gh` CL
 
 - [x] **0. Каркас** — Maven, Docker Compose с PostgreSQL, Liquibase, подключение к БД. *(PR #1, влит)*
 - [ ] **1. Схема БД** — миграции: `users`, `password_credentials`, `totp_credentials`, `recovery_codes`, `roles`, `permissions`, `role_permissions`, `user_roles`, `user_sessions`, `invitations`, `one_time_tokens`, `consents`, `audit_events` + таблицы Spring Authorization Server. Таблицы добавляем по одной, по мере того как они нужны фиче, а не все разом. *(`users` готова — PR #2; остальные — в рамках задач, которым они нужны)*
-- [ ] **2. Саморегистрация с подтверждением почты** ← **сейчас здесь**
+- [x] **2. Саморегистрация с подтверждением почты** *(PR #3–#7)*
   - [x] 2.1 Обновить `CLAUDE.md` под новое требование
   - [x] 2.2 Миграция: статус `PENDING_VERIFICATION` в `users` (новый changeset, заменяет `CHECK`)
   - [x] 2.3 Миграция: `password_credentials`
   - [x] 2.4 Миграция: `one_time_tokens`
   - [x] 2.5 Mailpit в `compose.yaml`
   - [x] 2.6 Java: нормализация email → сущность и репозиторий → сервис регистрации → отправка письма → ручка подтверждения (по классу за шаг)
-- [ ] 3. Authorization Server (клиенты, PKCE, ES256, JWKS)
-- [ ] 4. Вход (Argon2id, rate limit через Bucket4j + Redis)
+- [ ] 3. Authorization Server (клиенты, PKCE, ES256, JWKS) — **после задачи 4**: токен выдаётся только вошедшему
+- [ ] **4. Вход** ← **сейчас здесь** (делаем раньше задачи 3)
+  - [x] 4.1 Spring Security: правила доступа (`SecurityConfiguration`), CSRF в cookie
+  - [ ] 4.2 Вход по паролю: `UserDetailsService` (User + PasswordCredential, входят только `ACTIVE`) и `PasswordEncoder` поверх `PasswordHasher`
+  - [ ] 4.3 Своя страница входа (Thymeleaf), одинаковое сообщение на любую ошибку входа
+  - [ ] 4.4 Защита от подбора: rate limit (Bucket4j + Redis), временная блокировка после 10 неудач
 - [ ] 5. Приглашения (импорт CSV → письма → установка пароля)
 - [ ] 6. Сброс пароля
 - [ ] 7. Refresh-токены (ротация + reuse detection)
@@ -205,27 +209,25 @@ Remote: `https://github.com/Enotik-G/planchik.git`. Установлен `gh` CL
 
 ## Текущее состояние
 
-`master`: каркас (PR #1), `users` (PR #2), фундамент регистрации (PR #3), пароль и одноразовые токены (PR #4), письмо подтверждения + `RegistrationService` (PR #5), `POST /api/v1/registrations` + Swagger (PR #6).
+`master`: каркас (PR #1), `users` (PR #2), задача 2 целиком — саморегистрация с подтверждением почты (PR #3–#7).
 
-Ветка **`feature/email-verification`** — задача 2, подтверждение почты: `User.verifyEmail()`, `RegistrationService.confirmEmail`, API `POST /api/v1/email-verifications` (`EmailVerificationController`) и страница для браузера `/verify-email` (`VerifyEmailPageController` + Thymeleaf-шаблон `templates/verify-email.html`). GET страницы ничего не меняет — только показывает кнопку; подтверждает POST по кнопке (защита от почтовых антивирусов, открывающих ссылки заранее).
+Ветка **`feature/login`** — задача 4, вход. Готово: 4.1 — `spring-boot-starter-security`, `SecurityConfiguration`.
 
-**Страницы для браузера** — Thymeleaf (`src/main/resources/templates/`), без сессий и flash-атрибутов (сервис stateless).
+**Правила доступа (`SecurityConfiguration`)**: всё закрыто по умолчанию (`anyRequest().authenticated()`); новую публичную ручку открывать там явно. Открыты: `POST /api/v1/registrations`, `POST /api/v1/email-verifications`, `/verify-email`, `/verify-email/done`, Swagger, `/error`. CSRF — в cookie (`CookieCsrfTokenRepository`, без серверной сессии), для `/api/**` выключен (JSON-API не входит по cookie). `@WebMvcTest`-тесты делают `@Import(SecurityConfiguration.class)`, иначе проверяют дефолтные правила Spring, а не наши; POST форм в тестах — `.with(csrf())`.
 
 **Swagger UI:** http://localhost:8080/swagger-ui/index.html (JSON — `/v3/api-docs`). Заголовок и описание API — `OpenApiConfiguration`; каждую новую ручку описываем `@Tag` / `@Operation` / `@ApiResponse`, поля DTO — `@Schema(description, example)`. На сервере можно выключить: `SPRINGDOC_API_DOCS_ENABLED=false`, `SPRINGDOC_SWAGGER_UI_ENABLED=false`.
 
+**Страницы для браузера** — Thymeleaf (`src/main/resources/templates/`), без flash-атрибутов. Форма получает скрытое поле `_csrf` автоматически (`th:action`).
+
 Настройки почты (`application.properties`, всё с локальными умолчаниями): `MAIL_HOST`, `MAIL_PORT`, `MAIL_FROM`, `AUTH_PUBLIC_URL`.
 
-Заметки к задаче:
+Заметки:
 
-- `full_name` в `users` — `NOT NULL`, значит ФИО спрашиваем прямо в форме регистрации.
-- Приглашённые (`INVITED`) и самостоятельно зарегистрированные (`PENDING_VERIFICATION`) — разные статусы: у них разный путь к `ACTIVE`.
 - Время в коде — через бин `Clock` (`Instant.now(clock)`), а не `Instant.now()`: так в тестах можно подставить нужный момент (`Clock.fixed`).
 - Занятая почта при регистрации — молча ничего не делаем (защита от перебора «чья почта зарегистрирована»). Позже: письмо владельцу «кто-то пытался зарегистрироваться на ваш адрес» и повторная отправка письма подтверждения, если ссылка истекла.
 - Ответ 400 на ошибки валидации пока общий (`Invalid request content.`), без указания поля — доработать, когда появится фронтенд.
-- Гонка при регистрации одной почты: `existsByEmail` пройдут оба запроса, второго остановит `users_email_key` → `DataIntegrityViolationException`. Сервис должен это обработать.
+- После входа Spring Security создаёт HTTP-сессию (сессия у SSO-провайдера — это нормально). Для нескольких копий приложения её нужно вынести в общее хранилище (Spring Session + Redis/JDBC) — сделать до горизонтального масштабирования.
 
 ### Следующий шаг
 
-Открыть PR «Подтверждение почты» — после его merge задача 2 закрыта, отметить `[x]` в плане.
-
-Затем задача 3 — Authorization Server (Spring AS: клиенты, PKCE, ES256, JWKS). Перед ней заодно: вход по паролю (задача 4) нужен, чтобы получить первый токен, — решить порядок 3/4 вместе с пользователем.
+4.2 — вход по паролю: `UserDetailsService` + `PasswordEncoder` поверх `PasswordHasher`. Сейчас Spring создаёт временного пользователя `user` со случайным паролем в логе («Using generated security password») — этот шаг его заменит.
