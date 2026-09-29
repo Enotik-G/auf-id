@@ -12,9 +12,11 @@ import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.when;
 
 @DataJpaTest
 @Import({TestcontainersConfiguration.class, AccountUserDetailsService.class})
@@ -30,6 +32,19 @@ class AccountUserDetailsServiceTest {
 
     @Autowired
     private PasswordCredentialRepository credentialRepository;
+
+    @MockitoBean
+    private LoginAttemptService loginAttempts;
+
+    @Test
+    void userLockedAfterFailedAttemptsIsMarkedLocked() {
+        User user = saveUser("ivan@mail.ru", true);
+        when(loginAttempts.isLocked(user.getId())).thenReturn(true);
+
+        UserDetails details = service.loadUserByUsername("ivan@mail.ru");
+
+        assertThat(details.isAccountNonLocked()).isFalse();
+    }
 
     @Test
     void activeUserIsFoundByEmailAndNamedById() {

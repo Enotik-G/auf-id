@@ -13,6 +13,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -49,12 +50,65 @@ class LoginTest {
     @Autowired
     private PasswordHasher passwordHasher;
 
+    @Autowired
+    private StringRedisTemplate redis;
+
     @MockitoBean
     private JavaMailSender mailSender;
 
     @AfterEach
-    void deleteUsers() {
+    void cleanUp() {
         userRepository.deleteAll();
+        redis.getRequiredConnectionFactory().getConnection().serverCommands().flushAll();
+    }
+
+    @Test
+    void sixWrongPasswordsLockAccountEvenForCorrectPassword() throws Exception {
+        saveUser("ivan@mail.ru", true);
+        wrongPasswordTimes("ivan@mail.ru", 6);
+
+        // Заблокированному — то же общее сообщение, что и при неверном пароле:
+        // по ответу нельзя понять, что аккаунт существует и заблокирован.
+        mockMvc.perform(formLogin().user("ivan@mail.ru").password(PASSWORD))
+                .andExpect(unauthenticated())
+                .andExpect(redirectedUrl("/login?error"));
+    }
+
+    @Test
+    void fiveWrongPasswordsDoNotLock() throws Exception {
+        saveUser("ivan@mail.ru", true);
+        wrongPasswordTimes("ivan@mail.ru", 5);
+
+        mockMvc.perform(formLogin().user("ivan@mail.ru").password(PASSWORD))
+                .andExpect(authenticated());
+    }
+
+    @Test
+    void lockOfOneAccountDoesNotAffectAnother() throws Exception {
+        saveUser("ivan@mail.ru", true);
+        saveUser("petr@mail.ru", true);
+        wrongPasswordTimes("ivan@mail.ru", 6);
+
+        mockMvc.perform(formLogin().user("petr@mail.ru").password(PASSWORD))
+                .andExpect(authenticated());
+    }
+
+    @Test
+    void successfulLoginResetsFailureCount() throws Exception {
+        saveUser("ivan@mail.ru", true);
+        wrongPasswordTimes("ivan@mail.ru", 5);
+        mockMvc.perform(formLogin().user("ivan@mail.ru").password(PASSWORD)).andExpect(authenticated());
+        wrongPasswordTimes("ivan@mail.ru", 5);
+
+        mockMvc.perform(formLogin().user("ivan@mail.ru").password(PASSWORD))
+                .andExpect(authenticated());
+    }
+
+    private void wrongPasswordTimes(String email, int times) throws Exception {
+        for (int i = 0; i < times; i++) {
+            mockMvc.perform(formLogin().user(email).password("wrong password " + i))
+                    .andExpect(unauthenticated());
+        }
     }
 
     @Test

@@ -195,9 +195,9 @@ Remote: `https://github.com/Enotik-G/planchik.git`. Установлен `gh` CL
     - лимиты по IP: **20 попыток входа в минуту**, **5 регистраций в час**;
     - счётчики — в Redis (общие для всех копий приложения), rate limit — Bucket4j.
     - [x] 4.4.1 Redis в `compose.yaml` и в тестах (`TestcontainersConfiguration`), `spring-boot-starter-data-redis`
-    - [ ] 4.4.2 Блокировка аккаунта после 6 неудач (счётчик в Redis с TTL, `accountLocked` в `AccountUserDetailsService`)
+    - [x] 4.4.2 Блокировка аккаунта после 6 неудач (`LoginAttemptService` — ключи `login:failures:<id>` и `login:locked:<id>` с TTL 20 мин; `LoginAttemptListener` слушает события входа; `accountLocked` в `AccountUserDetailsService`)
     - [ ] 4.4.3 Лимиты по IP (Bucket4j + Redis) на `POST /login` и `POST /api/v1/registrations`
-    - [ ] 4.4.4 Ревью безопасности задачи 4 целиком
+    - [ ] 4.4.4 Ревью безопасности задачи 4 целиком. Уже известно: заблокированный аккаунт отвечает **быстрее** (проверка блокировки до пароля — Argon2 не выполняется), по времени ответа можно отличить «заблокирован» от «неверный пароль». Выровнять.
 - [ ] 5. Приглашения (импорт CSV → письма → установка пароля)
 - [ ] 6. Сброс пароля
 - [ ] 7. Refresh-токены (ротация + reuse detection)
@@ -222,7 +222,9 @@ Remote: `https://github.com/Enotik-G/planchik.git`. Установлен `gh` CL
 
 `master`: каркас (PR #1), `users` (PR #2), задача 2 — саморегистрация с подтверждением почты (PR #3–#7), задача 4 ч.1 — вход по паролю (PR #8).
 
-Ветка **`feature/brute-force-protection`** — 4.4, защита от подбора пароля. Готово: 4.4.1 — Redis.
+Ветка **`feature/brute-force-protection`** — 4.4, защита от подбора пароля. Готово: 4.4.1 — Redis; 4.4.2 — блокировка аккаунта после 6 неудач.
+
+Снять блокировку вручную (локально): `docker compose exec redis redis-cli DEL login:locked:<id пользователя>`.
 
 Вход (пакет `login`): `AccountUserDetailsService` (ищет по почте, входят только `ACTIVE`), `PepperedPasswordEncoder` (переходник Spring Security → `PasswordHasher`), `LoginConfiguration` (свой `DaoAuthenticationProvider`: «не подтверждена» проверяется **после** пароля, «заблокирован» — **до**), страницы `/login` (`?error`, `?unconfirmed`, `?logout`) и `/`, `LastLoginRecorder`. Общий стиль — `static/css/auth.css`.
 
@@ -245,4 +247,4 @@ Remote: `https://github.com/Enotik-G/planchik.git`. Установлен `gh` CL
 
 ### Следующий шаг
 
-4.4.2 — блокировка аккаунта после 6 неудачных входов подряд на 20 минут (счётчик в Redis с TTL).
+4.4.3 — лимиты по IP (Bucket4j + Redis): 20 попыток входа в минуту, 5 регистраций в час; превышение → «Слишком много попыток, попробуйте позже» (для API — `429 Too Many Requests`).
