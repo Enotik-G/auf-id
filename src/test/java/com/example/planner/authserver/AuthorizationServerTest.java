@@ -17,6 +17,7 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -87,8 +88,15 @@ class AuthorizationServerTest {
         credentialRepository.save(PasswordCredential.forUser(user, passwordHasher.hash(PASSWORD)));
     }
 
+    @Autowired
+    private JdbcTemplate jdbc;
+
+    @Autowired
+    private DevClientRegistration devClientRegistration;
+
     @AfterEach
     void cleanUp() {
+        jdbc.update("DELETE FROM oauth2_authorization");
         userRepository.deleteAll();
         redis.getRequiredConnectionFactory().getConnection().serverCommands().flushAll();
     }
@@ -154,6 +162,35 @@ class AuthorizationServerTest {
     }
 
     @Test
+    void issuedAuthorizationIsStoredInDatabase() throws Exception {
+        exchangeCodeForTokens(authorize());
+
+        Integer stored = jdbc.queryForObject(
+                "SELECT count(*) FROM oauth2_authorization WHERE principal_name = ? AND access_token_value IS NOT NULL",
+                Integer.class, user.getId().toString());
+        assertThat(stored).isEqualTo(1);
+    }
+
+    @Test
+    void userinfoReturnsSubjectForIssuedToken() throws Exception {
+        String accessToken = JsonPath.read(exchangeCodeForTokens(authorize()), "$.access_token");
+
+        mockMvc.perform(get("/userinfo").header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.sub").value(user.getId().toString()));
+    }
+
+    @Test
+    void devClientIsRegisteredInDatabaseOnlyOnce() {
+        devClientRegistration.run(null);
+        devClientRegistration.run(null);
+
+        Integer clients = jdbc.queryForObject(
+                "SELECT count(*) FROM oauth2_registered_client WHERE client_id = ?", Integer.class, CLIENT_ID);
+        assertThat(clients).isEqualTo(1);
+    }
+
+    @Test
     void codeWithoutCorrectPkceVerifierIsRejected() throws Exception {
         String code = authorize();
 
@@ -178,6 +215,18 @@ class AuthorizationServerTest {
                 .andReturn();
 
         assertThat(result.getResponse().getRedirectedUrl()).contains("error=invalid_request");
+    }
+
+    /** Шаг 2: планировщик меняет код на токены. Возвращает JSON-ответ сервера. */
+    private String exchangeCodeForTokens(String code) throws Exception {
+        return mockMvc.perform(post("/oauth2/token")
+                        .param("grant_type", "authorization_code")
+                        .param("code", code)
+                        .param("redirect_uri", REDIRECT_URI)
+                        .param("client_id", CLIENT_ID)
+                        .param("code_verifier", codeVerifier))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
     }
 
     /** Настоящий вход через форму, как у человека. Возвращает сессию, в которой он вошёл. */
