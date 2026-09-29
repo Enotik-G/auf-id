@@ -6,6 +6,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.event.TransactionPhase;
+import org.springframework.transaction.event.TransactionalEventListener;
 import org.springframework.web.util.UriComponentsBuilder;
 
 /** Отправляет письмо «подтвердите почту» со ссылкой, в которой лежит одноразовый токен. */
@@ -25,6 +27,16 @@ public class VerificationEmailSender {
         this.mailSender = mailSender;
         this.from = from;
         this.publicUrl = publicUrl;
+    }
+
+    /**
+     * Письмо уходит только после успешного коммита регистрации: если транзакция откатилась,
+     * письма со ссылкой на несуществующий токен не будет, а соединение с БД
+     * не держится, пока идёт медленный разговор с почтовым сервером.
+     */
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onVerificationEmailRequested(VerificationEmailRequested event) {
+        send(event.email(), event.fullName(), event.rawToken());
     }
 
     public void send(EmailAddress to, String fullName, String rawToken) {

@@ -208,7 +208,7 @@ Remote: `https://github.com/Enotik-G/planchik.git`. Установлен `gh` CL
 
 Ветка **`feature/verification-email`** — задача 2: письмо «подтвердите почту» и дальше сам процесс регистрации.
 
-Готово в ветке: `spring-boot-starter-mail` → Mailpit; пакет `registration`: `VerificationEmailSender` (ссылка `<auth.public-url>/verify-email?token=...`).
+Готово в ветке: `spring-boot-starter-mail` → Mailpit; пакет `registration`: `VerificationEmailSender` (ссылка `<auth.public-url>/verify-email?token=...`), `RegistrationService.register` — пользователь + пароль + токен, письмо уходит через событие `VerificationEmailRequested` **после коммита** (`@TransactionalEventListener(AFTER_COMMIT)`).
 
 Настройки почты (`application.properties`, всё с локальными умолчаниями): `MAIL_HOST`, `MAIL_PORT`, `MAIL_FROM`, `AUTH_PUBLIC_URL`.
 
@@ -217,8 +217,9 @@ Remote: `https://github.com/Enotik-G/planchik.git`. Установлен `gh` CL
 - `full_name` в `users` — `NOT NULL`, значит ФИО спрашиваем прямо в форме регистрации.
 - Приглашённые (`INVITED`) и самостоятельно зарегистрированные (`PENDING_VERIFICATION`) — разные статусы: у них разный путь к `ACTIVE`.
 - Время в коде — через бин `Clock` (`Instant.now(clock)`), а не `Instant.now()`: так в тестах можно подставить нужный момент (`Clock.fixed`).
+- Занятая почта при регистрации — молча ничего не делаем (защита от перебора «чья почта зарегистрирована»). Позже: письмо владельцу «кто-то пытался зарегистрироваться на ваш адрес» и повторная отправка письма подтверждения, если ссылка истекла.
 - Гонка при регистрации одной почты: `existsByEmail` пройдут оба запроса, второго остановит `users_email_key` → `DataIntegrityViolationException`. Сервис должен это обработать.
 
 ### Следующий шаг
 
-`RegistrationService.register(email, fullName, password)`: создать `User` + `PasswordCredential`, выдать токен `EMAIL_VERIFY`, отправить письмо.
+HTTP-ручка регистрации `POST /api/v1/registrations`: DTO с валидацией (ФИО не пустое, пароль ≥ 8 символов), вызов `RegistrationService`, одинаковый ответ `202` для новой и занятой почты (в т.ч. при `DataIntegrityViolationException` от гонки).
