@@ -179,7 +179,7 @@ Remote: `https://github.com/Enotik-G/planchik.git`. Установлен `gh` CL
   - [x] 2.3 Миграция: `password_credentials`
   - [x] 2.4 Миграция: `one_time_tokens`
   - [x] 2.5 Mailpit в `compose.yaml`
-  - [ ] 2.6 Java: нормализация email → сущность и репозиторий → сервис регистрации → отправка письма → ручка подтверждения (по классу за шаг)
+  - [x] 2.6 Java: нормализация email → сущность и репозиторий → сервис регистрации → отправка письма → ручка подтверждения (по классу за шаг)
 - [ ] 3. Authorization Server (клиенты, PKCE, ES256, JWKS)
 - [ ] 4. Вход (Argon2id, rate limit через Bucket4j + Redis)
 - [ ] 5. Приглашения (импорт CSV → письма → установка пароля)
@@ -206,7 +206,9 @@ Remote: `https://github.com/Enotik-G/planchik.git`. Установлен `gh` CL
 
 `master`: каркас (PR #1), `users` (PR #2), фундамент регистрации (PR #3), пароль и одноразовые токены (PR #4), письмо подтверждения + `RegistrationService` (PR #5), `POST /api/v1/registrations` + Swagger (PR #6).
 
-Ветка **`feature/email-verification`** — задача 2, подтверждение почты: `User.verifyEmail()`, `RegistrationService.confirmEmail`, API `POST /api/v1/email-verifications` (`EmailVerificationController`).
+Ветка **`feature/email-verification`** — задача 2, подтверждение почты: `User.verifyEmail()`, `RegistrationService.confirmEmail`, API `POST /api/v1/email-verifications` (`EmailVerificationController`) и страница для браузера `/verify-email` (`VerifyEmailPageController` + Thymeleaf-шаблон `templates/verify-email.html`). GET страницы ничего не меняет — только показывает кнопку; подтверждает POST по кнопке (защита от почтовых антивирусов, открывающих ссылки заранее).
+
+**Страницы для браузера** — Thymeleaf (`src/main/resources/templates/`), без сессий и flash-атрибутов (сервис stateless).
 
 **Swagger UI:** http://localhost:8080/swagger-ui/index.html (JSON — `/v3/api-docs`). Заголовок и описание API — `OpenApiConfiguration`; каждую новую ручку описываем `@Tag` / `@Operation` / `@ApiResponse`, поля DTO — `@Schema(description, example)`. На сервере можно выключить: `SPRINGDOC_API_DOCS_ENABLED=false`, `SPRINGDOC_SWAGGER_UI_ENABLED=false`.
 
@@ -223,4 +225,6 @@ Remote: `https://github.com/Enotik-G/planchik.git`. Установлен `gh` CL
 
 ### Следующий шаг
 
-Страница `GET /verify-email?token=...` для браузера (ссылка из письма ведёт на неё): показывает кнопку «Подтвердить почту», которая вызывает API. **Не** подтверждать почту прямо на GET: почтовые антивирусы (Outlook Safe Links и т.п.) заранее открывают ссылки из писем — токен сгорел бы до клика человека. После этого задача 2 закрыта.
+Открыть PR «Подтверждение почты» — после его merge задача 2 закрыта, отметить `[x]` в плане.
+
+Затем задача 3 — Authorization Server (Spring AS: клиенты, PKCE, ES256, JWKS). Перед ней заодно: вход по паролю (задача 4) нужен, чтобы получить первый токен, — решить порядок 3/4 вместе с пользователем.
