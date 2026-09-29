@@ -26,8 +26,15 @@ public class LoginConfiguration {
         DaoAuthenticationProvider provider = new DaoAuthenticationProvider(userDetailsService);
         provider.setPasswordEncoder(passwordEncoder);
 
+        // Хеш-«пустышка» для выравнивания времени ответа (считается один раз при запуске).
+        String timingEqualizerHash = passwordEncoder.encode("timing-equalizer");
+
         provider.setPreAuthenticationChecks(user -> {
             if (!user.isAccountNonLocked()) {
+                // Заблокированный аккаунт отказывает до проверки пароля — без этой строки он отвечал бы
+                // быстрее (Argon2 не выполняется), и по времени ответа можно было бы понять, что он заблокирован.
+                // Время Argon2 не зависит от пароля (перед ним HMAC), поэтому одной проверки пустышки достаточно.
+                passwordEncoder.matches("", timingEqualizerHash);
                 throw new LockedException("Аккаунт временно заблокирован");
             }
         });
