@@ -204,16 +204,18 @@ Remote: `https://github.com/Enotik-G/planchik.git`. Установлен `gh` CL
 
 ## Текущее состояние
 
-`master`: каркас (PR #1) + таблица `users` (PR #2, миграция `001-create-users.sql`).
+`master`: каркас (PR #1), таблица `users` (PR #2), фундамент регистрации (PR #3): миграции 002–004, Mailpit, `EmailAddress`, `User`, `UserRepository`, `PasswordHasher`, Testcontainers.
 
-Ветка **`feature/self-registration`** — задача 2, саморегистрация с подтверждением почты. Подпункты и прогресс — в плане выше.
+Ветка **`feature/registration-flow`** — задача 2, сам процесс регистрации: сервис, письмо, ручки.
+
+Готово в ветке: `PasswordCredential` + репозиторий.
 
 Заметки к задаче:
 
-- Новый статус `PENDING_VERIFICATION` добавляется **новым changeset** (`002-...`), который пересоздаёт `users_status_check`. `001` не трогаем — он уже в `master`.
 - `full_name` в `users` — `NOT NULL`, значит ФИО спрашиваем прямо в форме регистрации.
 - Приглашённые (`INVITED`) и самостоятельно зарегистрированные (`PENDING_VERIFICATION`) — разные статусы: у них разный путь к `ACTIVE`.
+- Гонка при регистрации одной почты: `existsByEmail` пройдут оба запроса, второго остановит `users_email_key` → `DataIntegrityViolationException`. Сервис должен это обработать.
 
 ### Следующий шаг
 
-2.6 — Java: готовы `EmailAddress` (+ конвертер), `User`, `UserStatus`, `UserRepository`, `PasswordHasher` (перец + Argon2id). Дальше — сущность `PasswordCredential` и её репозиторий.
+Сущность `OneTimeToken` + репозиторий, затем генерация токена (случайные 32 байта → SHA-256).
