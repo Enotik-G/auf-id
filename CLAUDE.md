@@ -184,7 +184,7 @@ Remote: `https://github.com/Enotik-G/planchik.git`. Установлен `gh` CL
 - [ ] 3. Authorization Server (клиенты, PKCE, ES256, JWKS) — **после задачи 4**: токен выдаётся только вошедшему
 - [ ] **4. Вход** ← **сейчас здесь** (делаем раньше задачи 3)
   - [x] 4.1 Spring Security: правила доступа (`SecurityConfiguration`), CSRF в cookie
-  - [ ] 4.2 Вход по паролю: `UserDetailsService` (User + PasswordCredential, входят только `ACTIVE`) и `PasswordEncoder` поверх `PasswordHasher`
+  - [x] 4.2 Вход по паролю: `UserDetailsService` (User + PasswordCredential, входят только `ACTIVE`) и `PasswordEncoder` поверх `PasswordHasher`
   - [ ] 4.3 Своя страница входа (Thymeleaf), одинаковое сообщение на любую ошибку входа
   - [ ] 4.4 Защита от подбора: rate limit (Bucket4j + Redis), временная блокировка после 10 неудач
 - [ ] 5. Приглашения (импорт CSV → письма → установка пароля)
@@ -211,7 +211,9 @@ Remote: `https://github.com/Enotik-G/planchik.git`. Установлен `gh` CL
 
 `master`: каркас (PR #1), `users` (PR #2), задача 2 целиком — саморегистрация с подтверждением почты (PR #3–#7).
 
-Ветка **`feature/login`** — задача 4, вход. Готово: 4.1 — `spring-boot-starter-security`, `SecurityConfiguration`.
+Ветка **`feature/login`** — задача 4, вход. Готово: 4.1 — `spring-boot-starter-security`, `SecurityConfiguration`; 4.2 — пакет `login`: `AccountUserDetailsService` (ищет по почте, входят только `ACTIVE`) и `PepperedPasswordEncoder` (переходник Spring Security → `PasswordHasher`).
+
+**Имя вошедшего пользователя (`authentication.getName()`) — его `id` (UUID), не почта.** Почту можно сменить, id — нет; он же станет `sub` в JWT.
 
 **Правила доступа (`SecurityConfiguration`)**: всё закрыто по умолчанию (`anyRequest().authenticated()`); новую публичную ручку открывать там явно. Открыты: `POST /api/v1/registrations`, `POST /api/v1/email-verifications`, `/verify-email`, `/verify-email/done`, Swagger, `/error`. CSRF — в cookie (`CookieCsrfTokenRepository`, без серверной сессии), для `/api/**` выключен (JSON-API не входит по cookie). `@WebMvcTest`-тесты делают `@Import(SecurityConfiguration.class)`, иначе проверяют дефолтные правила Spring, а не наши; POST форм в тестах — `.with(csrf())`.
 
@@ -230,4 +232,4 @@ Remote: `https://github.com/Enotik-G/planchik.git`. Установлен `gh` CL
 
 ### Следующий шаг
 
-4.2 — вход по паролю: `UserDetailsService` + `PasswordEncoder` поверх `PasswordHasher`. Сейчас Spring создаёт временного пользователя `user` со случайным паролем в логе («Using generated security password») — этот шаг его заменит.
+4.3 — своя страница входа (Thymeleaf, по-русски). Сообщение об ошибке одно на все случаи (стандартная страница Spring уже так делает: «Invalid credentials»). Решить: подсказывать ли «подтвердите почту» тому, кто ввёл верный пароль, но не подтвердил почту (удобство vs. утечка информации). После входа — страница «Вы вошли» вместо `/` (там сейчас 404). Обновлять `users.last_login_at`.
