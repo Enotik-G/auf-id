@@ -14,6 +14,9 @@
     <div class="message error" th:if="${param.unconfirmed}">
         Почта ещё не подтверждена. Перейдите по ссылке из письма, которое пришло после регистрации.
     </div>
+    <div class="message error" th:if="${param.tooManyAttempts}">
+        Слишком много попыток входа с вашего адреса. Подождите минуту и попробуйте снова.
+    </div>
     <div class="message info" th:if="${param.logout}">Вы вышли из аккаунта.</div>
 
     <form method="post" th:action="@{/login}">

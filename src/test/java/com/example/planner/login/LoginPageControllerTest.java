@@ -44,6 +44,13 @@ class LoginPageControllerTest {
     }
 
     @Test
+    void showsTooManyAttemptsMessage() throws Exception {
+        mockMvc.perform(get("/login?tooManyAttempts"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("Слишком много попыток входа")));
+    }
+
+    @Test
     void confirmsLogout() throws Exception {
         mockMvc.perform(get("/login?logout"))
                 .andExpect(status().isOk())

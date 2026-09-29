@@ -15,6 +15,7 @@
     <description>planner</description>
     <properties>
         <java.version>25</java.version>
+        <bucket4j.version>8.20.0</bucket4j.version>
     </properties>
     <dependencies>
         <dependency>
@@ -93,6 +94,17 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-redis-test</artifactId>
             <scope>test</scope>
+        </dependency>
+        <!-- Лимиты запросов по IP (token bucket), состояние — в Redis. Spring Boot версию не задаёт. -->
+        <dependency>
+            <groupId>com.bucket4j</groupId>
+            <artifactId>bucket4j_jdk17-core</artifactId>
+            <version>${bucket4j.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.bucket4j</groupId>
+            <artifactId>bucket4j_jdk17-lettuce</artifactId>
+            <version>${bucket4j.version}</version>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>

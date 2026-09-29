@@ -196,7 +196,7 @@ Remote: `https://github.com/Enotik-G/planchik.git`. Установлен `gh` CL
     - счётчики — в Redis (общие для всех копий приложения), rate limit — Bucket4j.
     - [x] 4.4.1 Redis в `compose.yaml` и в тестах (`TestcontainersConfiguration`), `spring-boot-starter-data-redis`
     - [x] 4.4.2 Блокировка аккаунта после 6 неудач (`LoginAttemptService` — ключи `login:failures:<id>` и `login:locked:<id>` с TTL 20 мин; `LoginAttemptListener` слушает события входа; `accountLocked` в `AccountUserDetailsService`)
-    - [ ] 4.4.3 Лимиты по IP (Bucket4j + Redis) на `POST /login` и `POST /api/v1/registrations`
+    - [x] 4.4.3 Лимиты по IP (пакет `ratelimit`: `RateLimit` — сами лимиты, `RateLimiter` — Bucket4j поверх Redis, `RateLimitFilter` — перед Spring Security; `POST /login` → `/login?tooManyAttempts`, `POST /api/v1/registrations` → `429` + `Retry-After`)
     - [ ] 4.4.4 Ревью безопасности задачи 4 целиком. Уже известно: заблокированный аккаунт отвечает **быстрее** (проверка блокировки до пароля — Argon2 не выполняется), по времени ответа можно отличить «заблокирован» от «неверный пароль». Выровнять.
 - [ ] 5. Приглашения (импорт CSV → письма → установка пароля)
 - [ ] 6. Сброс пароля
@@ -222,9 +222,11 @@ Remote: `https://github.com/Enotik-G/planchik.git`. Установлен `gh` CL
 
 `master`: каркас (PR #1), `users` (PR #2), задача 2 — саморегистрация с подтверждением почты (PR #3–#7), задача 4 ч.1 — вход по паролю (PR #8).
 
-Ветка **`feature/brute-force-protection`** — 4.4, защита от подбора пароля. Готово: 4.4.1 — Redis; 4.4.2 — блокировка аккаунта после 6 неудач.
+Ветка **`feature/brute-force-protection`** — 4.4, защита от подбора пароля. Готово: 4.4.1 — Redis; 4.4.2 — блокировка аккаунта после 6 неудач; 4.4.3 — лимиты по IP.
 
-Снять блокировку вручную (локально): `docker compose exec redis redis-cli DEL login:locked:<id пользователя>`.
+Снять блокировку вручную (локально): `docker compose exec redis redis-cli DEL login:locked:<id пользователя>`. Сбросить лимиты по IP: удалить ключи `rate:*`.
+
+Тесты с полным приложением чистят Redis в `@AfterEach` (`flushAll`) — иначе блокировки и лимиты перетекают между тестами (все запросы MockMvc идут с 127.0.0.1).
 
 Вход (пакет `login`): `AccountUserDetailsService` (ищет по почте, входят только `ACTIVE`), `PepperedPasswordEncoder` (переходник Spring Security → `PasswordHasher`), `LoginConfiguration` (свой `DaoAuthenticationProvider`: «не подтверждена» проверяется **после** пароля, «заблокирован» — **до**), страницы `/login` (`?error`, `?unconfirmed`, `?logout`) и `/`, `LastLoginRecorder`. Общий стиль — `static/css/auth.css`.
 
@@ -243,8 +245,9 @@ Remote: `https://github.com/Enotik-G/planchik.git`. Установлен `gh` CL
 - Время в коде — через бин `Clock` (`Instant.now(clock)`), а не `Instant.now()`: так в тестах можно подставить нужный момент (`Clock.fixed`).
 - Занятая почта при регистрации — молча ничего не делаем (защита от перебора «чья почта зарегистрирована»). Позже: письмо владельцу «кто-то пытался зарегистрироваться на ваш адрес» и повторная отправка письма подтверждения, если ссылка истекла.
 - Ответ 400 на ошибки валидации пока общий (`Invalid request content.`), без указания поля — доработать, когда появится фронтенд.
+- **Лимиты по IP берут `request.getRemoteAddr()`.** Если сервис окажется за прокси (nginx, балансировщик), это будет адрес прокси — все пользователи попадут в одно ведро. При деплое: включить `server.forward-headers-strategy=native` и доверять `X-Forwarded-For` **только от своего прокси** (иначе злоумышленник подделает заголовок и обойдёт лимит).
 - После входа Spring Security создаёт HTTP-сессию (сессия у SSO-провайдера — это нормально). Для нескольких копий приложения её нужно вынести в общее хранилище (Spring Session + Redis/JDBC) — сделать до горизонтального масштабирования.
 
 ### Следующий шаг
 
-4.4.3 — лимиты по IP (Bucket4j + Redis): 20 попыток входа в минуту, 5 регистраций в час; превышение → «Слишком много попыток, попробуйте позже» (для API — `429 Too Many Requests`).
+4.4.4 — ревью безопасности задачи 4 целиком (вход, блокировка, лимиты). Уже известно: заблокированный аккаунт отвечает быстрее (Argon2 не выполняется) — выровнять время. Затем PR «Защита от подбора пароля».
