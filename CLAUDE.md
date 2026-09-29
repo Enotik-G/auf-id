@@ -189,7 +189,7 @@ Remote: `https://github.com/Enotik-G/planchik.git`. Установлен `gh` CL
   - [x] 4.1 Spring Security: правила доступа (`SecurityConfiguration`), CSRF в cookie
   - [x] 4.2 Вход по паролю: `UserDetailsService` (User + PasswordCredential, входят только `ACTIVE`) и `PasswordEncoder` поверх `PasswordHasher`
   - [x] 4.3 Своя страница входа (Thymeleaf), «Вы вошли», выход; подсказка «подтвердите почту» — только при верном пароле
-  - [ ] 4.3б Записывать `users.last_login_at` при успешном входе
+  - [x] 4.3б Записывать `users.last_login_at` при успешном входе (`LastLoginRecorder` слушает `AuthenticationSuccessEvent`)
   - [ ] 4.4 Защита от подбора: rate limit (Bucket4j + Redis), временная блокировка после 10 неудач
 - [ ] 5. Приглашения (импорт CSV → письма → установка пароля)
 - [ ] 6. Сброс пароля
@@ -236,4 +236,4 @@ Remote: `https://github.com/Enotik-G/planchik.git`. Установлен `gh` CL
 
 ### Следующий шаг
 
-4.3б — записывать `users.last_login_at` при успешном входе (метод `User.recordLogin(Instant)`, слушатель события успешного входа). Потом 4.4 — защита от подбора пароля (Redis + Bucket4j, временная блокировка `LOCKED`).
+4.4 — защита от подбора пароля: Redis в `compose.yaml`, rate limit (Bucket4j) по IP и по аккаунту на `POST /login` и `POST /api/v1/registrations`, временная блокировка `LOCKED` после 10 неудач подряд. Перед реализацией обсудить с пользователем: лимиты, срок блокировки, что показывать заблокированному.

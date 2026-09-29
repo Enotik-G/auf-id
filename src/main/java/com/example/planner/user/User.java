@@ -66,4 +66,9 @@ public class User {
         emailVerified = true;
         status = UserStatus.ACTIVE;
     }
+
+    /** Отметить успешный вход. */
+    public void recordLogin(Instant at) {
+        lastLoginAt = at;
+    }
 }

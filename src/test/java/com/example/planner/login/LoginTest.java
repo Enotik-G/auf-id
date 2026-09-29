@@ -17,6 +17,7 @@ import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestBuilders.formLogin;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestBuilders.logout;
@@ -63,6 +64,26 @@ class LoginTest {
         mockMvc.perform(formLogin().user("Ivan@Mail.ru").password(PASSWORD))
                 .andExpect(authenticated().withUsername(user.getId().toString()))
                 .andExpect(redirectedUrl("/"));
+    }
+
+    @Test
+    void successfulLoginIsRecorded() throws Exception {
+        User user = saveUser("ivan@mail.ru", true);
+
+        mockMvc.perform(formLogin().user("ivan@mail.ru").password(PASSWORD))
+                .andExpect(authenticated());
+
+        assertThat(userRepository.findById(user.getId()).orElseThrow().getLastLoginAt()).isNotNull();
+    }
+
+    @Test
+    void failedLoginIsNotRecorded() throws Exception {
+        User user = saveUser("ivan@mail.ru", true);
+
+        mockMvc.perform(formLogin().user("ivan@mail.ru").password("wrong password"))
+                .andExpect(unauthenticated());
+
+        assertThat(userRepository.findById(user.getId()).orElseThrow().getLastLoginAt()).isNull();
     }
 
     @Test
