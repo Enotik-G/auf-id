@@ -2,6 +2,7 @@ package com.example.planner.registration;
 
 import com.example.planner.ClockConfiguration;
 import com.example.planner.TestcontainersConfiguration;
+import com.example.planner.onetimetoken.InvalidOneTimeTokenException;
 import com.example.planner.onetimetoken.OneTimeTokenRepository;
 import com.example.planner.onetimetoken.OneTimeTokenService;
 import com.example.planner.onetimetoken.TokenPurpose;
@@ -19,6 +20,7 @@ import org.springframework.test.context.event.ApplicationEvents;
 import org.springframework.test.context.event.RecordApplicationEvents;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @DataJpaTest(properties = "auth.password.pepper=test-pepper-only-for-tests-0123456789")
 @Import({TestcontainersConfiguration.class, ClockConfiguration.class,
@@ -82,5 +84,37 @@ class RegistrationServiceTest {
         assertThat(userRepository.count()).isEqualTo(1);
         assertThat(userRepository.findByEmail(EMAIL).orElseThrow().getFullName()).isEqualTo("Иван Петров");
         assertThat(events.stream(VerificationEmailRequested.class)).hasSize(1);
+    }
+
+    @Test
+    void confirmingEmailWithTokenFromLetterActivatesUser() {
+        registrationService.register(EMAIL, "Иван Петров", "correct horse battery staple");
+
+        registrationService.confirmEmail(tokenFromLetter());
+
+        User user = userRepository.findByEmail(EMAIL).orElseThrow();
+        assertThat(user.getStatus()).isEqualTo(UserStatus.ACTIVE);
+        assertThat(user.isEmailVerified()).isTrue();
+    }
+
+    @Test
+    void linkFromLetterWorksOnlyOnce() {
+        registrationService.register(EMAIL, "Иван Петров", "correct horse battery staple");
+        String token = tokenFromLetter();
+        registrationService.confirmEmail(token);
+
+        assertThatThrownBy(() -> registrationService.confirmEmail(token))
+                .isInstanceOf(InvalidOneTimeTokenException.class);
+    }
+
+    @Test
+    void madeUpTokenIsRejected() {
+        assertThatThrownBy(() -> registrationService.confirmEmail("made-up-token"))
+                .isInstanceOf(InvalidOneTimeTokenException.class);
+    }
+
+    /** Токен, который ушёл бы в письме. */
+    private String tokenFromLetter() {
+        return events.stream(VerificationEmailRequested.class).findFirst().orElseThrow().rawToken();
     }
 }

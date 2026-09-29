@@ -1,5 +1,6 @@
 package com.example.planner.registration;
 
+import com.example.planner.onetimetoken.InvalidOneTimeTokenException;
 import com.example.planner.onetimetoken.OneTimeTokenService;
 import com.example.planner.onetimetoken.TokenPurpose;
 import com.example.planner.user.EmailAddress;
@@ -49,5 +50,20 @@ public class RegistrationService {
         String rawToken = tokenService.issue(user, TokenPurpose.EMAIL_VERIFY);
 
         events.publishEvent(new VerificationEmailRequested(email, fullName, rawToken));
+    }
+
+    /**
+     * Переход по ссылке из письма: гасит токен EMAIL_VERIFY и активирует аккаунт.
+     *
+     * @throws InvalidOneTimeTokenException если ссылка недействительна, использована, устарела
+     *                                      или пользователь уже не ждёт подтверждения (например, заблокирован)
+     */
+    @Transactional
+    public void confirmEmail(String rawToken) {
+        User user = tokenService.consume(rawToken, TokenPurpose.EMAIL_VERIFY);
+        if (!user.isAwaitingEmailVerification()) {
+            throw new InvalidOneTimeTokenException();
+        }
+        user.verifyEmail();
     }
 }

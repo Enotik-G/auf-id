@@ -204,9 +204,9 @@ Remote: `https://github.com/Enotik-G/planchik.git`. Установлен `gh` CL
 
 ## Текущее состояние
 
-`master`: каркас (PR #1), `users` (PR #2), фундамент регистрации (PR #3), пароль и одноразовые токены (PR #4), письмо подтверждения + `RegistrationService` (PR #5).
+`master`: каркас (PR #1), `users` (PR #2), фундамент регистрации (PR #3), пароль и одноразовые токены (PR #4), письмо подтверждения + `RegistrationService` (PR #5), `POST /api/v1/registrations` + Swagger (PR #6).
 
-Ветка **`feature/registration-api`** — задача 2: ручка `POST /api/v1/registrations` (`RegistrationController`, `RegistrationRequest`, `InvalidEmailException`) и описание API в Swagger.
+Ветка **`feature/email-verification`** — задача 2, подтверждение почты: `User.verifyEmail()`, `RegistrationService.confirmEmail`, API `POST /api/v1/email-verifications` (`EmailVerificationController`).
 
 **Swagger UI:** http://localhost:8080/swagger-ui/index.html (JSON — `/v3/api-docs`). Заголовок и описание API — `OpenApiConfiguration`; каждую новую ручку описываем `@Tag` / `@Operation` / `@ApiResponse`, поля DTO — `@Schema(description, example)`. На сервере можно выключить: `SPRINGDOC_API_DOCS_ENABLED=false`, `SPRINGDOC_SWAGGER_UI_ENABLED=false`.
 
@@ -223,4 +223,4 @@ Remote: `https://github.com/Enotik-G/planchik.git`. Установлен `gh` CL
 
 ### Следующий шаг
 
-Открыть PR «Регистрация через API с письмом подтверждения». Затем новая ветка: ручка `GET /verify-email?token=...` — гасит токен `EMAIL_VERIFY`, пользователь → `ACTIVE`, `email_verified = true`.
+Страница `GET /verify-email?token=...` для браузера (ссылка из письма ведёт на неё): показывает кнопку «Подтвердить почту», которая вызывает API. **Не** подтверждать почту прямо на GET: почтовые антивирусы (Outlook Safe Links и т.п.) заранее открывают ссылки из писем — токен сгорел бы до клика человека. После этого задача 2 закрыта.
