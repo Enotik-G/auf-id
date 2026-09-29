@@ -10,6 +10,12 @@ services:
     volumes:
       - auth-db-data:/var/lib/postgresql
 
+  redis:
+    image: redis:8.8-alpine
+    ports:
+      - "6379:6379"
+    # Тома нет: в Redis только временные счётчики попыток входа — терять их при перезапуске не страшно.
+
   mailpit:
     image: axllent/mailpit:v1.31
     ports:

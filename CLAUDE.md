@@ -57,13 +57,12 @@
 - **Нет allowlist доменов и таблицы `allowed_email_domains`** — принимаем любую почту, фильтр — подтверждение владения ящиком.
 - **Нормализация email — только `trim` + нижний регистр.** Документ предлагает ещё срезать `+alias`, но это верно только для Gmail и некоторых провайдеров; для произвольных почт так делать нельзя.
 - **Саморегистрация** — в документе вход только по приглашению.
-- **Redis пока не поднимаем** — понадобится на задаче про rate limiting. ⚠️ Из-за открытой регистрации rate limit обязателен **до** того, как сервис станет доступен снаружи.
 - **Email хранится открытым текстом.** В документе он зашифрован + `email_hash`, но само шифрование там отнесено к фазе 2 (нужен Vault). Приедет отдельной миграцией.
 
 ## Локальный запуск
 
 ```bash
-docker compose up -d          # PostgreSQL 18 (localhost:5432) + Mailpit (SMTP localhost:1025, письма — http://localhost:8025)
+docker compose up -d          # PostgreSQL 18 (localhost:5432) + Redis 8 (localhost:6379) + Mailpit (SMTP localhost:1025, письма — http://localhost:8025)
 ./mvnw spring-boot:run        # приложение (PASSWORD_PEPPER берётся из .env — см. ниже)
 ```
 
@@ -195,6 +194,10 @@ Remote: `https://github.com/Enotik-G/planchik.git`. Установлен `gh` CL
     - заблокированному **аккаунту** — общее «Неверная почта или пароль» (не выдаём, что аккаунт существует); превышен лимит **по IP** — «Слишком много попыток, попробуйте позже»;
     - лимиты по IP: **20 попыток входа в минуту**, **5 регистраций в час**;
     - счётчики — в Redis (общие для всех копий приложения), rate limit — Bucket4j.
+    - [x] 4.4.1 Redis в `compose.yaml` и в тестах (`TestcontainersConfiguration`), `spring-boot-starter-data-redis`
+    - [ ] 4.4.2 Блокировка аккаунта после 6 неудач (счётчик в Redis с TTL, `accountLocked` в `AccountUserDetailsService`)
+    - [ ] 4.4.3 Лимиты по IP (Bucket4j + Redis) на `POST /login` и `POST /api/v1/registrations`
+    - [ ] 4.4.4 Ревью безопасности задачи 4 целиком
 - [ ] 5. Приглашения (импорт CSV → письма → установка пароля)
 - [ ] 6. Сброс пароля
 - [ ] 7. Refresh-токены (ротация + reuse detection)
@@ -217,9 +220,11 @@ Remote: `https://github.com/Enotik-G/planchik.git`. Установлен `gh` CL
 
 ## Текущее состояние
 
-`master`: каркас (PR #1), `users` (PR #2), задача 2 целиком — саморегистрация с подтверждением почты (PR #3–#7).
+`master`: каркас (PR #1), `users` (PR #2), задача 2 — саморегистрация с подтверждением почты (PR #3–#7), задача 4 ч.1 — вход по паролю (PR #8).
 
-Ветка **`feature/login`** — задача 4, вход. Готово: 4.1 — `spring-boot-starter-security`, `SecurityConfiguration`; 4.2 — пакет `login`: `AccountUserDetailsService` (ищет по почте, входят только `ACTIVE`) и `PepperedPasswordEncoder` (переходник Spring Security → `PasswordHasher`); 4.3 — `LoginConfiguration` (свой `DaoAuthenticationProvider`: «не подтверждена» проверяется **после** пароля, «заблокирован» — **до**), страницы `/login` (`?error`, `?unconfirmed`, `?logout`) и `/` («Вы вошли» + выход), общий стиль `static/css/auth.css`.
+Ветка **`feature/brute-force-protection`** — 4.4, защита от подбора пароля. Готово: 4.4.1 — Redis.
+
+Вход (пакет `login`): `AccountUserDetailsService` (ищет по почте, входят только `ACTIVE`), `PepperedPasswordEncoder` (переходник Spring Security → `PasswordHasher`), `LoginConfiguration` (свой `DaoAuthenticationProvider`: «не подтверждена» проверяется **после** пароля, «заблокирован» — **до**), страницы `/login` (`?error`, `?unconfirmed`, `?logout`) и `/`, `LastLoginRecorder`. Общий стиль — `static/css/auth.css`.
 
 **Имя вошедшего пользователя (`authentication.getName()`) — его `id` (UUID), не почта.** Почту можно сменить, id — нет; он же станет `sub` в JWT.
 
@@ -240,4 +245,4 @@ Remote: `https://github.com/Enotik-G/planchik.git`. Установлен `gh` CL
 
 ### Следующий шаг
 
-Открыть PR «Вход» (4.1–4.3б). После merge — новая ветка под 4.4 (защита от подбора, решения записаны в плане выше).
+4.4.2 — блокировка аккаунта после 6 неудачных входов подряд на 20 минут (счётчик в Redis с TTL).
