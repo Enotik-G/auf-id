@@ -208,7 +208,7 @@ Remote: `https://github.com/Enotik-G/planchik.git`. Установлен `gh` CL
 
 Ветка **`feature/registration-flow`** — задача 2, сам процесс регистрации: сервис, письмо, ручки.
 
-Готово в ветке: `PasswordCredential` + репозиторий.
+Готово в ветке: `PasswordCredential` + репозиторий; пакет `onetimetoken`: `OneTimeToken`, `TokenPurpose`, репозиторий.
 
 Заметки к задаче:
 
@@ -218,4 +218,4 @@ Remote: `https://github.com/Enotik-G/planchik.git`. Установлен `gh` CL
 
 ### Следующий шаг
 
-Сущность `OneTimeToken` + репозиторий, затем генерация токена (случайные 32 байта → SHA-256).
+`OneTimeTokenService`: выдать токен (случайные 32 байта → в БД SHA-256, наружу — сам токен) и погасить токен (найти по хешу и назначению, проверить срок и `used_at`).
