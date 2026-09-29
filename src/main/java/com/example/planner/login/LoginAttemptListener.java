@@ -20,24 +20,24 @@ public class LoginAttemptListener {
     private final UserRepository userRepository;
 
     /**
-     * Неверный пароль (или несуществующая почта — Spring не различает их намеренно).
-     * В событии — то, что человек ввёл в поле логина, то есть почта; ищем по ней пользователя.
-     * Для несуществующей почты считать нечего — от перебора таких адресов защищает лимит по IP.
+     * Неверный пароль или несуществующая почта — Spring намеренно их не различает, и мы тоже:
+     * считаем неудачу по введённой почте в обоих случаях.
      */
     @EventListener
     public void onBadCredentials(AuthenticationFailureBadCredentialsEvent event) {
         String enteredEmail = event.getAuthentication().getName();
         try {
-            userRepository.findByEmail(new EmailAddress(enteredEmail))
-                    .ifPresent(user -> loginAttempts.recordFailure(user.getId()));
+            loginAttempts.recordFailure(new EmailAddress(enteredEmail));
         } catch (InvalidEmailException ignored) {
-            // Мусор вместо почты — такого пользователя точно нет.
+            // Мусор вместо почты — такой адрес не зарегистрировать, считать нечего.
         }
     }
 
     @EventListener
     public void onSuccess(AuthenticationSuccessEvent event) {
-        // После успешного входа имя — уже id пользователя (см. AccountUserDetailsService).
-        loginAttempts.recordSuccess(UUID.fromString(event.getAuthentication().getName()));
+        // После успешного входа имя — уже id пользователя (см. AccountUserDetailsService); по нему узнаём почту.
+        UUID userId = UUID.fromString(event.getAuthentication().getName());
+        userRepository.findById(userId)
+                .ifPresent(user -> loginAttempts.recordSuccess(user.getEmail()));
     }
 }

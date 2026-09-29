@@ -24,7 +24,6 @@ public class AccountUserDetailsService implements UserDetailsService {
 
     private final UserRepository userRepository;
     private final PasswordCredentialRepository credentialRepository;
-    private final LoginAttemptService loginAttempts;
 
     /**
      * @param username то, что человек ввёл в поле логина, — его почта
@@ -42,9 +41,9 @@ public class AccountUserDetailsService implements UserDetailsService {
                 .withUsername(user.getId().toString())
                 .password(credential.getPasswordHash())
                 .disabled(user.getStatus() != UserStatus.ACTIVE && user.getStatus() != UserStatus.LOCKED)
-                // Два вида блокировки: статус LOCKED в БД (на будущее — ставит администратор)
-                // и временная — после серии неверных паролей (живёт в Redis, снимается сама).
-                .accountLocked(user.getStatus() == UserStatus.LOCKED || loginAttempts.isLocked(user.getId()))
+                // Статус LOCKED в БД — на будущее, ставит администратор. От подбора пароля защищает
+                // не блокировка, а капча (LoginAttemptService) — чужой аккаунт так не заблокировать.
+                .accountLocked(user.getStatus() == UserStatus.LOCKED)
                 .build();
     }
 

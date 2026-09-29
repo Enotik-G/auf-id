@@ -53,6 +53,9 @@ class LoginTest {
     @Autowired
     private StringRedisTemplate redis;
 
+    @Autowired
+    private LoginAttemptService loginAttempts;
+
     @MockitoBean
     private JavaMailSender mailSender;
 
@@ -63,45 +66,39 @@ class LoginTest {
     }
 
     @Test
-    void sixWrongPasswordsLockAccountEvenForCorrectPassword() throws Exception {
+    void wrongPasswordsNoLongerLockTheAccount() throws Exception {
         saveUser("ivan@mail.ru", true);
-        wrongPasswordTimes("ivan@mail.ru", 6);
+        wrongPasswordTimes("ivan@mail.ru", 10);
 
-        // Заблокированному — то же общее сообщение, что и при неверном пароле:
-        // по ответу нельзя понять, что аккаунт существует и заблокирован.
-        mockMvc.perform(formLogin().user("ivan@mail.ru").password(PASSWORD))
-                .andExpect(unauthenticated())
-                .andExpect(redirectedUrl("/login?error"));
-    }
-
-    @Test
-    void fiveWrongPasswordsDoNotLock() throws Exception {
-        saveUser("ivan@mail.ru", true);
-        wrongPasswordTimes("ivan@mail.ru", 5);
-
+        // Блокировки больше нет (её заменила капча): чужой аккаунт так не закрыть.
         mockMvc.perform(formLogin().user("ivan@mail.ru").password(PASSWORD))
                 .andExpect(authenticated());
     }
 
     @Test
-    void lockOfOneAccountDoesNotAffectAnother() throws Exception {
+    void threeWrongPasswordsMakeCaptchaRequired() throws Exception {
         saveUser("ivan@mail.ru", true);
-        saveUser("petr@mail.ru", true);
-        wrongPasswordTimes("ivan@mail.ru", 6);
+        wrongPasswordTimes("Ivan@Mail.ru", 3);
 
-        mockMvc.perform(formLogin().user("petr@mail.ru").password(PASSWORD))
-                .andExpect(authenticated());
+        assertThat(loginAttempts.isCaptchaRequired(new EmailAddress("ivan@mail.ru"))).isTrue();
+    }
+
+    /** Главное свойство счётчика: для выдуманной почты — ровно то же, что для настоящей. */
+    @Test
+    void unknownEmailGetsCaptchaTheSameWay() throws Exception {
+        wrongPasswordTimes("nobody@mail.ru", 3);
+
+        assertThat(loginAttempts.isCaptchaRequired(new EmailAddress("nobody@mail.ru"))).isTrue();
     }
 
     @Test
     void successfulLoginResetsFailureCount() throws Exception {
         saveUser("ivan@mail.ru", true);
-        wrongPasswordTimes("ivan@mail.ru", 5);
-        mockMvc.perform(formLogin().user("ivan@mail.ru").password(PASSWORD)).andExpect(authenticated());
-        wrongPasswordTimes("ivan@mail.ru", 5);
+        wrongPasswordTimes("ivan@mail.ru", 3);
 
-        mockMvc.perform(formLogin().user("ivan@mail.ru").password(PASSWORD))
-                .andExpect(authenticated());
+        mockMvc.perform(formLogin().user("ivan@mail.ru").password(PASSWORD)).andExpect(authenticated());
+
+        assertThat(loginAttempts.isCaptchaRequired(new EmailAddress("ivan@mail.ru"))).isFalse();
     }
 
     private void wrongPasswordTimes(String email, int times) throws Exception {

@@ -1,6 +1,7 @@
 package com.example.planner.login;
 
 import com.example.planner.TestcontainersConfiguration;
+import com.example.planner.user.EmailAddress;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -8,15 +9,13 @@ import org.springframework.boot.data.redis.test.autoconfigure.DataRedisTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
-import java.util.UUID;
-
 import static org.assertj.core.api.Assertions.assertThat;
 
 @DataRedisTest
 @Import({TestcontainersConfiguration.class, LoginAttemptService.class})
 class LoginAttemptServiceTest {
 
-    private final UUID user = UUID.randomUUID();
+    private static final EmailAddress IVAN = new EmailAddress("ivan@mail.ru");
 
     @Autowired
     private LoginAttemptService loginAttempts;
@@ -30,40 +29,53 @@ class LoginAttemptServiceTest {
     }
 
     @Test
-    void fiveFailuresDoNotLock() {
-        failTimes(5);
+    void twoFailuresDoNotRequireCaptcha() {
+        failTimes(IVAN, 2);
 
-        assertThat(loginAttempts.isLocked(user)).isFalse();
+        assertThat(loginAttempts.isCaptchaRequired(IVAN)).isFalse();
     }
 
     @Test
-    void sixthFailureLocksForTwentyMinutes() {
-        failTimes(6);
+    void thirdFailureRequiresCaptcha() {
+        failTimes(IVAN, 3);
 
-        assertThat(loginAttempts.isLocked(user)).isTrue();
-        // Блокировка — ключ с TTL: снимется сама. Проверяем, что срок — около 20 минут.
-        assertThat(redis.getExpire("login:locked:" + user)).isBetween(19 * 60L, 20 * 60L);
+        assertThat(loginAttempts.isCaptchaRequired(IVAN)).isTrue();
     }
 
     @Test
-    void successInBetweenResetsTheCount() {
-        failTimes(5);
-        loginAttempts.recordSuccess(user);
-        failTimes(5);
+    void successResetsTheCount() {
+        failTimes(IVAN, 3);
+        loginAttempts.recordSuccess(IVAN);
 
-        assertThat(loginAttempts.isLocked(user)).isFalse();
+        assertThat(loginAttempts.isCaptchaRequired(IVAN)).isFalse();
     }
 
     @Test
-    void failuresOfOneUserDoNotLockAnother() {
-        failTimes(6);
+    void emailTypedDifferentlyIsTheSameCounter() {
+        failTimes(new EmailAddress("IVAN@Mail.ru"), 3);
 
-        assertThat(loginAttempts.isLocked(UUID.randomUUID())).isFalse();
+        assertThat(loginAttempts.isCaptchaRequired(IVAN)).isTrue();
     }
 
-    private void failTimes(int times) {
+    @Test
+    void failuresForOneEmailDoNotAffectAnother() {
+        failTimes(IVAN, 3);
+
+        assertThat(loginAttempts.isCaptchaRequired(new EmailAddress("petr@mail.ru"))).isFalse();
+    }
+
+    @Test
+    void counterIsForgottenAfterADayAndEmailIsNotStoredInPlainText() {
+        failTimes(IVAN, 1);
+
+        String key = redis.keys("login:failures:*").iterator().next();
+        assertThat(key).doesNotContain("ivan").hasSize("login:failures:".length() + 64);
+        assertThat(redis.getExpire(key)).isBetween(23 * 3600L, 24 * 3600L);
+    }
+
+    private void failTimes(EmailAddress email, int times) {
         for (int i = 0; i < times; i++) {
-            loginAttempts.recordFailure(user);
+            loginAttempts.recordFailure(email);
         }
     }
 }
