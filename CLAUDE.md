@@ -185,7 +185,7 @@ Remote: `https://github.com/Enotik-G/planchik.git`. Установлен `gh` CL
   - [x] 2.6 Java: нормализация email → сущность и репозиторий → сервис регистрации → отправка письма → ручка подтверждения (по классу за шаг)
 - [ ] **3. Authorization Server** (выдача JWT) ← **сейчас здесь**
   - [x] 3.1 Spring Authorization Server подключён (`authserver/AuthorizationServerConfiguration` — своя цепочка фильтров `@Order(1)`, наша `SecurityConfiguration` — `@Order(2)`), OIDC, **временный** клиент `planner-dev` в `application.properties` (публичный, PKCE обязателен, access token 10 мин). Путь «authorize → код → token» работает; `sub` = id пользователя.
-  - [ ] 3.2 Ключ подписи **ES256 из переменной окружения**. Сейчас ключ RSA генерирует Spring Boot при каждом запуске: после перезапуска старые токены перестают проверяться, а у двух копий приложения были бы разные ключи.
+  - [x] 3.2 Ключ подписи **ES256** из `JWT_SIGNING_KEY` (закрытый ключ P-256, PKCS#8, base64; открытый вычисляется из него — `authserver/EcSigningKey`, `kid` — отпечаток ключа по RFC 7638, стабилен). `JwtConfiguration`: свой `JWKSource` (Spring Boot больше не генерирует RSA при каждом запуске) и `OAuth2TokenCustomizer` — ES256 для **всех** токенов (по умолчанию access token — RS256). Проверено: токен проходит проверку подписи по JWKS и после перезапуска.
   - [ ] 3.3 Клиенты и выданные авторизации — в БД: миграция с таблицами Spring AS (`oauth2_registered_client`, `oauth2_authorization`, `oauth2_authorization_consent`), JDBC-репозитории; убрать клиента из properties. Секреты клиентов проверяются бином `PasswordEncoder` — это наш `PepperedPasswordEncoder` (Argon2 + перец), учесть при регистрации клиентов.
   - [ ] 3.4 Свои поля в токене (`email`, `name`; `roles` — когда появятся роли) и `/userinfo`.
   - [ ] 3.5 Ревью безопасности задачи 3.
@@ -234,9 +234,11 @@ Remote: `https://github.com/Enotik-G/planchik.git`. Установлен `gh` CL
 
 `master`: каркас (PR #1), `users` (PR #2), задача 2 — саморегистрация (PR #3–#7), задача 4 — вход и защита от подбора (PR #8, #9).
 
-Ветка **`feature/authorization-server`** — задача 3, выдача JWT. Готово: 3.1.
+Ветка **`feature/authorization-server`** — задача 3, выдача JWT. Готово: 3.1, 3.2.
 
-**Секреты локально — в `.env`** (в `.gitignore`): `PASSWORD_PEPPER` и `CAPTCHA_SECRET`, оба без умолчаний — без них приложение не стартует. **В тестах** секреты задаёт `src/test/resources/config/application.properties` (Spring Boot читает его поверх основного), в аннотациях тестов их не повторять.
+`/userinfo` после перезапуска Auth отвечает 401 на старые токены: он ищет токен в списке выданных авторизаций, а тот пока в памяти. Подпись при этом валидна — сервисам (планировщику) это не мешает. Уйдёт в 3.3.
+
+**Секреты локально — в `.env`** (в `.gitignore`): `PASSWORD_PEPPER`, `CAPTCHA_SECRET`, `JWT_SIGNING_KEY` — все без умолчаний, без них приложение не стартует. Ключ подписи генерировать так (OpenSSL 3 без `pkcs8 -topk8` выдаёт старый формат SEC1, Java его не читает): `openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 | openssl pkcs8 -topk8 -nocrypt -outform DER | base64 -w0`. Сменить ключ = все выданные токены станут недействительны. **В тестах** секреты задаёт `src/test/resources/config/application.properties` (Spring Boot читает его поверх основного), в аннотациях тестов их не повторять.
 
 Вход (пакет `login`): `AccountUserDetailsService` (ищет по почте, входят только `ACTIVE`), `PepperedPasswordEncoder` (переходник Spring Security → `PasswordHasher`), `LoginConfiguration` (свой `DaoAuthenticationProvider`: «не подтверждена» проверяется **после** пароля, «заблокирован» — **до**), страницы `/login` (`?error`, `?unconfirmed`, `?logout`) и `/`, `LastLoginRecorder`. Общий стиль — `static/css/auth.css`.
 
@@ -265,4 +267,4 @@ Remote: `https://github.com/Enotik-G/planchik.git`. Установлен `gh` CL
 
 ### Следующий шаг
 
-3.2 — постоянный ключ подписи ES256 из переменной окружения (вместо RSA-ключа, который Spring Boot генерирует заново при каждом запуске).
+3.3 — клиенты и выданные авторизации в БД: миграция с таблицами Spring AS, JDBC-репозитории, клиент `planner-dev` из properties — в базу.

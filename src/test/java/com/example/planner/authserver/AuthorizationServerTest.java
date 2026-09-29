@@ -109,6 +109,9 @@ class AuthorizationServerTest {
     void publicKeysArePublished() throws Exception {
         mockMvc.perform(get("/oauth2/jwks"))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.keys.length()").value(1))
+                .andExpect(jsonPath("$.keys[0].kty").value("EC"))
+                .andExpect(jsonPath("$.keys[0].crv").value("P-256"))
                 .andExpect(jsonPath("$.keys[0].kid").exists())
                 // Только открытая часть ключа: закрытой (d) здесь быть не должно.
                 .andExpect(jsonPath("$.keys[0].d").doesNotExist());
@@ -138,6 +141,11 @@ class AuthorizationServerTest {
 
         String accessToken = JsonPath.read(tokenResponse.getResponse().getContentAsString(), "$.access_token");
         Jwt jwt = jwtDecoder.decode(accessToken);
+        String idToken = JsonPath.read(tokenResponse.getResponse().getContentAsString(), "$.id_token");
+
+        // Оба токена подписаны нашим постоянным ключом ES256.
+        assertThat(jwt.getHeaders()).containsEntry("alg", "ES256");
+        assertThat(jwtDecoder.decode(idToken).getHeaders()).containsEntry("alg", "ES256");
 
         assertThat(jwt.getSubject()).isEqualTo(user.getId().toString());
         assertThat(jwt.getIssuer()).hasToString("http://localhost:8080");
