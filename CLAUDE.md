@@ -64,7 +64,7 @@
 
 ```bash
 docker compose up -d          # PostgreSQL 18 (localhost:5432) + Mailpit (SMTP localhost:1025, письма — http://localhost:8025)
-./mvnw spring-boot:run        # приложение
+PASSWORD_PEPPER=... ./mvnw spring-boot:run   # приложение (без PASSWORD_PEPPER не стартует)
 ```
 
 Полезное:
@@ -86,6 +86,14 @@ docker compose down -v                                     # ⚠️ остано
 | пароль | `auf67` (через `${DB_PASSWORD:auf67}`) |
 
 Пароль локальный и лежит в репозитории сознательно. Настоящие секреты — только через переменные окружения, как требует документ.
+
+### Перец для паролей (`PASSWORD_PEPPER`)
+
+Секрет, который подмешивается к паролю перед Argon2id (`user/PasswordHasher`). **Умолчания нет намеренно**: без переменной приложение падает с `Could not resolve placeholder 'PASSWORD_PEPPER'`, короче 32 символов — отказывается стартовать. Так прод не сможет случайно запуститься с «учебным» перцем из репозитория.
+
+- Сгенерировать: `openssl rand -base64 48`.
+- Локально — один раз сгенерировать и сохранить (например, в Run Configuration IntelliJ → Environment variables). **Сменить перец = все существующие пароли перестанут подходить**, поэтому он постоянный для каждого окружения.
+- Тесты задают свой перец сами (`PlannerApplicationTests`, `PasswordHasherTest`), переменная им не нужна.
 
 ## Подводные камни (уже наступали)
 
@@ -208,4 +216,4 @@ Remote: `https://github.com/Enotik-G/planchik.git`. Установлен `gh` CL
 
 ### Следующий шаг
 
-2.6 — Java: готовы `EmailAddress` (+ конвертер), `User`, `UserStatus`, `UserRepository`. Дальше — хеширование паролей (Spring Security, Argon2id) и сущность `PasswordCredential`.
+2.6 — Java: готовы `EmailAddress` (+ конвертер), `User`, `UserStatus`, `UserRepository`, `PasswordHasher` (перец + Argon2id). Дальше — сущность `PasswordCredential` и её репозиторий.
