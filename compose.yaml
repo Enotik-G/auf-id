@@ -9,6 +9,13 @@ services:
       - "5432:5432"
     volumes:
       - auth-db-data:/var/lib/postgresql
+
+  mailpit:
+    image: axllent/mailpit:v1.31
+    ports:
+      - "1025:1025"   # SMTP — сюда приложение отправляет письма
+      - "8025:8025"   # веб-интерфейс — здесь письма читаем мы
+
 volumes:
   auth-db-data:
 
