@@ -14,8 +14,10 @@ import org.springframework.security.authentication.dao.DaoAuthenticationProvider
  * Поэтому «почта не подтверждена» (disabled) проверяем <b>после</b> пароля: подсказку увидит только тот,
  * кто знает пароль.
  *
- * <p>Временная блокировка (locked) — наоборот, <b>до</b> пароля: иначе при подборе пароля
- * заблокированный аккаунт сообщал бы, что очередная догадка верна.
+ * <p>Временная блокировка (locked) — <b>до</b> пароля: отказ всегда один и тот же, верен пароль или нет,
+ * так что при подборе заблокированный аккаунт не подсказывает, что догадка верна. Время ответа при этом
+ * не отличается: Spring Security 7 даже после отказа на этой проверке всё равно проверяет пароль
+ * (флаг {@code alwaysPerformAdditionalChecksOnUser}, включён по умолчанию) и отбрасывает результат.
  */
 @Configuration(proxyBeanMethods = false)
 public class LoginConfiguration {
@@ -26,15 +28,8 @@ public class LoginConfiguration {
         DaoAuthenticationProvider provider = new DaoAuthenticationProvider(userDetailsService);
         provider.setPasswordEncoder(passwordEncoder);
 
-        // Хеш-«пустышка» для выравнивания времени ответа (считается один раз при запуске).
-        String timingEqualizerHash = passwordEncoder.encode("timing-equalizer");
-
         provider.setPreAuthenticationChecks(user -> {
             if (!user.isAccountNonLocked()) {
-                // Заблокированный аккаунт отказывает до проверки пароля — без этой строки он отвечал бы
-                // быстрее (Argon2 не выполняется), и по времени ответа можно было бы понять, что он заблокирован.
-                // Время Argon2 не зависит от пароля (перед ним HMAC), поэтому одной проверки пустышки достаточно.
-                passwordEncoder.matches("", timingEqualizerHash);
                 throw new LockedException("Аккаунт временно заблокирован");
             }
         });
