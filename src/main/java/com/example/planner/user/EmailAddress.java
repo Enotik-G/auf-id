@@ -19,23 +19,23 @@ public record EmailAddress(String value) {
 
     public EmailAddress {
         if (value == null) {
-            throw new IllegalArgumentException("Email не указан");
+            throw new InvalidEmailException("Email не указан");
         }
 
         value = EDGE_SPACES.matcher(value).replaceAll("").toLowerCase(Locale.ROOT);
 
         if (value.length() > MAX_LENGTH) {
-            throw new IllegalArgumentException("Email длиннее " + MAX_LENGTH + " символов");
+            throw new InvalidEmailException("Email длиннее " + MAX_LENGTH + " символов");
         }
 
         if (ANY_SPACE.matcher(value).find()) {
-            throw new IllegalArgumentException("Email не может содержать пробелы");
+            throw new InvalidEmailException("Email не может содержать пробелы");
         }
 
         int at = value.indexOf('@');
         boolean hasSingleAt = at > 0 && at == value.lastIndexOf('@') && at < value.length() - 1;
         if (!hasSingleAt) {
-            throw new IllegalArgumentException("Email должен иметь вид имя@домен");
+            throw new InvalidEmailException("Email должен иметь вид имя@домен");
         }
     }
 
