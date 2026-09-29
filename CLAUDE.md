@@ -98,6 +98,9 @@ docker compose down -v                                     # ⚠️ остано
 
 ## Подводные камни (уже наступали)
 
+- **`formLogin().loginPage("/login").permitAll()` открывает только `/login` без параметров** — `/login?error` и т.п. отправляли обратно на `/login`, сообщения не показывались. Страница входа открыта в `authorizeHttpRequests` (`requestMatchers("/login")` сравнивает только путь).
+- **MockMvc: `.param("x", "")` ≠ `?x` в адресе.** Правила Spring Security могут смотреть на строку запроса, а `.param` её не заполняет. Проверять адреса с параметрами как в браузере: `get("/login?error")`.
+
 - **Postgres 18 сменил расположение данных.** Том монтируется в `/var/lib/postgresql`, **не** в `/var/lib/postgresql/data`. Внутри Postgres сам делает подпапку `18/docker`. Со старым путём контейнер отказывается стартовать.
 - **Группа `docker` применяется только при новом входе в систему.** Причём в GNOME недостаточно перелогиниться: `gnome-terminal-server` наследует группы от `systemd --user`, который переживает выход. Нужна полная перезагрузка (или `newgrp docker` — но только для одного окна).
 - **Системный PostgreSQL 17 был отключён** (`sudo systemctl disable --now postgresql`), он занимал порт 5432. Данные его целы в `/var/lib/postgresql/17/main`.
@@ -185,7 +188,8 @@ Remote: `https://github.com/Enotik-G/planchik.git`. Установлен `gh` CL
 - [ ] **4. Вход** ← **сейчас здесь** (делаем раньше задачи 3)
   - [x] 4.1 Spring Security: правила доступа (`SecurityConfiguration`), CSRF в cookie
   - [x] 4.2 Вход по паролю: `UserDetailsService` (User + PasswordCredential, входят только `ACTIVE`) и `PasswordEncoder` поверх `PasswordHasher`
-  - [ ] 4.3 Своя страница входа (Thymeleaf), одинаковое сообщение на любую ошибку входа
+  - [x] 4.3 Своя страница входа (Thymeleaf), «Вы вошли», выход; подсказка «подтвердите почту» — только при верном пароле
+  - [ ] 4.3б Записывать `users.last_login_at` при успешном входе
   - [ ] 4.4 Защита от подбора: rate limit (Bucket4j + Redis), временная блокировка после 10 неудач
 - [ ] 5. Приглашения (импорт CSV → письма → установка пароля)
 - [ ] 6. Сброс пароля
@@ -211,7 +215,7 @@ Remote: `https://github.com/Enotik-G/planchik.git`. Установлен `gh` CL
 
 `master`: каркас (PR #1), `users` (PR #2), задача 2 целиком — саморегистрация с подтверждением почты (PR #3–#7).
 
-Ветка **`feature/login`** — задача 4, вход. Готово: 4.1 — `spring-boot-starter-security`, `SecurityConfiguration`; 4.2 — пакет `login`: `AccountUserDetailsService` (ищет по почте, входят только `ACTIVE`) и `PepperedPasswordEncoder` (переходник Spring Security → `PasswordHasher`).
+Ветка **`feature/login`** — задача 4, вход. Готово: 4.1 — `spring-boot-starter-security`, `SecurityConfiguration`; 4.2 — пакет `login`: `AccountUserDetailsService` (ищет по почте, входят только `ACTIVE`) и `PepperedPasswordEncoder` (переходник Spring Security → `PasswordHasher`); 4.3 — `LoginConfiguration` (свой `DaoAuthenticationProvider`: «не подтверждена» проверяется **после** пароля, «заблокирован» — **до**), страницы `/login` (`?error`, `?unconfirmed`, `?logout`) и `/` («Вы вошли» + выход), общий стиль `static/css/auth.css`.
 
 **Имя вошедшего пользователя (`authentication.getName()`) — его `id` (UUID), не почта.** Почту можно сменить, id — нет; он же станет `sub` в JWT.
 
@@ -232,4 +236,4 @@ Remote: `https://github.com/Enotik-G/planchik.git`. Установлен `gh` CL
 
 ### Следующий шаг
 
-4.3 — своя страница входа (Thymeleaf, по-русски). Сообщение об ошибке одно на все случаи (стандартная страница Spring уже так делает: «Invalid credentials»). Решить: подсказывать ли «подтвердите почту» тому, кто ввёл верный пароль, но не подтвердил почту (удобство vs. утечка информации). После входа — страница «Вы вошли» вместо `/` (там сейчас 404). Обновлять `users.last_login_at`.
+4.3б — записывать `users.last_login_at` при успешном входе (метод `User.recordLogin(Instant)`, слушатель события успешного входа). Потом 4.4 — защита от подбора пароля (Redis + Bucket4j, временная блокировка `LOCKED`).

@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Вы вошли</title>
+    <link rel="stylesheet" th:href="@{/css/auth.css}">
+</head>
+<body>
+<main class="card">
+    <h1 th:text="|Здравствуйте, ${user.fullName}!|">Здравствуйте!</h1>
+    <p>Вы вошли как <strong th:text="${user.email}">почта</strong>.</p>
+
+    <form method="post" th:action="@{/logout}">
+        <button type="submit" class="secondary">Выйти</button>
+    </form>
+</main>
+</body>
+</html>

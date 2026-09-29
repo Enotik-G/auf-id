@@ -17,9 +17,16 @@ import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestBuilders.formLogin;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestBuilders.logout;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.security.test.web.servlet.response.SecurityMockMvcResultMatchers.authenticated;
 import static org.springframework.security.test.web.servlet.response.SecurityMockMvcResultMatchers.unauthenticated;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /** Вход через настоящую форму логина — всё приложение целиком, настоящий Postgres. */
 @SpringBootTest(properties = "auth.password.pepper=test-pepper-only-for-tests-0123456789")
@@ -50,33 +57,70 @@ class LoginTest {
     }
 
     @Test
-    void activeUserLogsInAndIsIdentifiedById() throws Exception {
+    void activeUserLogsInIsIdentifiedByIdAndGoesToHomePage() throws Exception {
         User user = saveUser("ivan@mail.ru", true);
 
         mockMvc.perform(formLogin().user("Ivan@Mail.ru").password(PASSWORD))
-                .andExpect(authenticated().withUsername(user.getId().toString()));
+                .andExpect(authenticated().withUsername(user.getId().toString()))
+                .andExpect(redirectedUrl("/"));
     }
 
     @Test
-    void wrongPasswordIsRejected() throws Exception {
+    void wrongPasswordGivesGeneralError() throws Exception {
         saveUser("ivan@mail.ru", true);
 
         mockMvc.perform(formLogin().user("ivan@mail.ru").password("wrong password"))
-                .andExpect(unauthenticated());
+                .andExpect(unauthenticated())
+                .andExpect(redirectedUrl("/login?error"));
     }
 
     @Test
-    void userWhoDidNotConfirmEmailCannotLogIn() throws Exception {
+    void unconfirmedEmailWithCorrectPasswordGetsHint() throws Exception {
         saveUser("ivan@mail.ru", false);
 
         mockMvc.perform(formLogin().user("ivan@mail.ru").password(PASSWORD))
-                .andExpect(unauthenticated());
+                .andExpect(unauthenticated())
+                .andExpect(redirectedUrl("/login?unconfirmed"));
+    }
+
+    /** Главная проверка безопасности этой задачи: без пароля статус чужой почты не узнать. */
+    @Test
+    void unconfirmedEmailWithWrongPasswordLooksLikeAnyOtherError() throws Exception {
+        saveUser("ivan@mail.ru", false);
+
+        mockMvc.perform(formLogin().user("ivan@mail.ru").password("wrong password"))
+                .andExpect(unauthenticated())
+                .andExpect(redirectedUrl("/login?error"));
     }
 
     @Test
-    void unknownEmailIsRejected() throws Exception {
+    void unknownEmailGivesGeneralError() throws Exception {
         mockMvc.perform(formLogin().user("nobody@mail.ru").password(PASSWORD))
-                .andExpect(unauthenticated());
+                .andExpect(unauthenticated())
+                .andExpect(redirectedUrl("/login?error"));
+    }
+
+    @Test
+    void homePageGreetsLoggedInUser() throws Exception {
+        User user = saveUser("ivan@mail.ru", true);
+
+        mockMvc.perform(get("/").with(user(user.getId().toString())))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("Здравствуйте, Иван Петров!")))
+                .andExpect(content().string(containsString("ivan@mail.ru")));
+    }
+
+    @Test
+    void homePageRequiresLogin() throws Exception {
+        mockMvc.perform(get("/"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/login"));
+    }
+
+    @Test
+    void logoutReturnsToLoginPage() throws Exception {
+        mockMvc.perform(logout())
+                .andExpect(redirectedUrl("/login?logout"));
     }
 
     private User saveUser(String email, boolean confirmed) {
