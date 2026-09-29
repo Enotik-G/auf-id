@@ -53,4 +53,17 @@ public class User {
         user.createdAt = Instant.now();
         return user;
     }
+
+    public boolean isAwaitingEmailVerification() {
+        return status == UserStatus.PENDING_VERIFICATION;
+    }
+
+    /** Владелец подтвердил почту — аккаунт становится активным. */
+    public void verifyEmail() {
+        if (!isAwaitingEmailVerification()) {
+            throw new IllegalStateException("Подтвердить почту можно только в статусе PENDING_VERIFICATION, сейчас " + status);
+        }
+        emailVerified = true;
+        status = UserStatus.ACTIVE;
+    }
 }

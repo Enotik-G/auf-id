@@ -64,7 +64,7 @@
 
 ```bash
 docker compose up -d          # PostgreSQL 18 (localhost:5432) + Mailpit (SMTP localhost:1025, письма — http://localhost:8025)
-PASSWORD_PEPPER=... ./mvnw spring-boot:run   # приложение (без PASSWORD_PEPPER не стартует)
+./mvnw spring-boot:run        # приложение (PASSWORD_PEPPER берётся из .env — см. ниже)
 ```
 
 Полезное:
@@ -91,8 +91,9 @@ docker compose down -v                                     # ⚠️ остано
 
 Секрет, который подмешивается к паролю перед Argon2id (`user/PasswordHasher`). **Умолчания нет намеренно**: без переменной приложение падает с `Could not resolve placeholder 'PASSWORD_PEPPER'`, короче 32 символов — отказывается стартовать. Так прод не сможет случайно запуститься с «учебным» перцем из репозитория.
 
-- Сгенерировать: `openssl rand -base64 48`.
-- Локально — один раз сгенерировать и сохранить (например, в Run Configuration IntelliJ → Environment variables). **Сменить перец = все существующие пароли перестанут подходить**, поэтому он постоянный для каждого окружения.
+- **Локально — файл `.env` в корне проекта** (в `.gitignore`, права `600`), его подхватывает `spring.config.import=optional:file:.env[.properties]` при любом способе запуска (IntelliJ, `./mvnw spring-boot:run`). Содержимое: `PASSWORD_PEPPER=<openssl rand -base64 48>`. На новой машине — создать заново.
+- На сервере `.env` нет → берётся переменная окружения; нет и её → приложение не стартует.
+- **Сменить перец = все существующие пароли перестанут подходить**, поэтому он постоянный для каждого окружения.
 - Тесты задают свой перец сами (`PlannerApplicationTests`, `PasswordHasherTest`), переменная им не нужна.
 
 ## Подводные камни (уже наступали)
@@ -179,7 +180,7 @@ Remote: `https://github.com/Enotik-G/planchik.git`. Установлен `gh` CL
   - [x] 2.3 Миграция: `password_credentials`
   - [x] 2.4 Миграция: `one_time_tokens`
   - [x] 2.5 Mailpit в `compose.yaml`
-  - [ ] 2.6 Java: нормализация email → сущность и репозиторий → сервис регистрации → отправка письма → ручка подтверждения (по классу за шаг)
+  - [x] 2.6 Java: нормализация email → сущность и репозиторий → сервис регистрации → отправка письма → ручка подтверждения (по классу за шаг)
 - [ ] 3. Authorization Server (клиенты, PKCE, ES256, JWKS)
 - [ ] 4. Вход (Argon2id, rate limit через Bucket4j + Redis)
 - [ ] 5. Приглашения (импорт CSV → письма → установка пароля)
@@ -204,9 +205,11 @@ Remote: `https://github.com/Enotik-G/planchik.git`. Установлен `gh` CL
 
 ## Текущее состояние
 
-`master`: каркас (PR #1), `users` (PR #2), фундамент регистрации (PR #3), пароль и одноразовые токены (PR #4), письмо подтверждения + `RegistrationService` (PR #5).
+`master`: каркас (PR #1), `users` (PR #2), фундамент регистрации (PR #3), пароль и одноразовые токены (PR #4), письмо подтверждения + `RegistrationService` (PR #5), `POST /api/v1/registrations` + Swagger (PR #6).
 
-Ветка **`feature/registration-api`** — задача 2: ручка `POST /api/v1/registrations` (`RegistrationController`, `RegistrationRequest`, `InvalidEmailException`) и описание API в Swagger.
+Ветка **`feature/email-verification`** — задача 2, подтверждение почты: `User.verifyEmail()`, `RegistrationService.confirmEmail`, API `POST /api/v1/email-verifications` (`EmailVerificationController`) и страница для браузера `/verify-email` (`VerifyEmailPageController` + Thymeleaf-шаблон `templates/verify-email.html`). GET страницы ничего не меняет — только показывает кнопку; подтверждает POST по кнопке (защита от почтовых антивирусов, открывающих ссылки заранее).
+
+**Страницы для браузера** — Thymeleaf (`src/main/resources/templates/`), без сессий и flash-атрибутов (сервис stateless).
 
 **Swagger UI:** http://localhost:8080/swagger-ui/index.html (JSON — `/v3/api-docs`). Заголовок и описание API — `OpenApiConfiguration`; каждую новую ручку описываем `@Tag` / `@Operation` / `@ApiResponse`, поля DTO — `@Schema(description, example)`. На сервере можно выключить: `SPRINGDOC_API_DOCS_ENABLED=false`, `SPRINGDOC_SWAGGER_UI_ENABLED=false`.
 
@@ -223,4 +226,6 @@ Remote: `https://github.com/Enotik-G/planchik.git`. Установлен `gh` CL
 
 ### Следующий шаг
 
-Открыть PR «Регистрация через API с письмом подтверждения». Затем новая ветка: ручка `GET /verify-email?token=...` — гасит токен `EMAIL_VERIFY`, пользователь → `ACTIVE`, `email_verified = true`.
+Открыть PR «Подтверждение почты» — после его merge задача 2 закрыта, отметить `[x]` в плане.
+
+Затем задача 3 — Authorization Server (Spring AS: клиенты, PKCE, ES256, JWKS). Перед ней заодно: вход по паролю (задача 4) нужен, чтобы получить первый токен, — решить порядок 3/4 вместе с пользователем.
