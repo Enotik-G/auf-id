@@ -204,11 +204,13 @@ Remote: `https://github.com/Enotik-G/planchik.git`. Установлен `gh` CL
 
 ## Текущее состояние
 
-`master`: каркас (PR #1), таблица `users` (PR #2), фундамент регистрации (PR #3): миграции 002–004, Mailpit, `EmailAddress`, `User`, `UserRepository`, `PasswordHasher`, Testcontainers.
+`master`: каркас (PR #1), `users` (PR #2), фундамент регистрации (PR #3), пароль и одноразовые токены (PR #4).
 
-Ветка **`feature/registration-flow`** — задача 2, сам процесс регистрации: сервис, письмо, ручки.
+Ветка **`feature/verification-email`** — задача 2: письмо «подтвердите почту» и дальше сам процесс регистрации.
 
-Готово в ветке: `PasswordCredential` + репозиторий; пакет `onetimetoken`: `OneTimeToken`, `TokenPurpose` (со сроками жизни), репозиторий, `OneTimeTokenService` (issue/consume); `ClockConfiguration` — бин `Clock`.
+Готово в ветке: `spring-boot-starter-mail` → Mailpit; пакет `registration`: `VerificationEmailSender` (ссылка `<auth.public-url>/verify-email?token=...`).
+
+Настройки почты (`application.properties`, всё с локальными умолчаниями): `MAIL_HOST`, `MAIL_PORT`, `MAIL_FROM`, `AUTH_PUBLIC_URL`.
 
 Заметки к задаче:
 
@@ -219,4 +221,4 @@ Remote: `https://github.com/Enotik-G/planchik.git`. Установлен `gh` CL
 
 ### Следующий шаг
 
-Отправка письма: `spring-boot-starter-mail` → Mailpit, класс, который шлёт письмо «подтвердите почту» со ссылкой.
+`RegistrationService.register(email, fullName, password)`: создать `User` + `PasswordCredential`, выдать токен `EMAIL_VERIFY`, отправить письмо.
