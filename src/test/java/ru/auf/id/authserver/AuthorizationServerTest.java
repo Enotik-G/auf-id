@@ -37,7 +37,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestBuilders.formLogin;
 import static org.springframework.security.test.web.servlet.response.SecurityMockMvcResultMatchers.authenticated;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -285,6 +287,35 @@ class AuthorizationServerTest {
         mockMvc.perform(get("/userinfo").header("Authorization", "Bearer " + accessToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.sub").value(user.getId().toString()));
+    }
+
+    /**
+     * Браузер перед {@code fetch} на {@code /oauth2/token} с другого сайта шлёт предварительный запрос
+     * (preflight, метод OPTIONS). Сайт из {@code auth.cors.allowed-origins} должен получить в ответ
+     * своё имя в {@code Access-Control-Allow-Origin}, иначе браузер не отдаст JavaScript ответ с токеном.
+     */
+    @Test
+    void preflightFromAllowedOriginIsAnswered() throws Exception {
+        mockMvc.perform(options("/oauth2/token")
+                        .header("Origin", "http://planner.test")
+                        .header("Access-Control-Request-Method", "POST")
+                        .header("Access-Control-Request-Headers", "Content-Type"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Access-Control-Allow-Origin", "http://planner.test"));
+    }
+
+    /**
+     * Чужой сайт (не из {@code auth.cors.allowed-origins}) разрешения не получает: Spring отвечает 403,
+     * и заголовка {@code Access-Control-Allow-Origin} в ответе нет.
+     */
+    @Test
+    void preflightFromUnknownOriginIsRejected() throws Exception {
+        mockMvc.perform(options("/oauth2/token")
+                        .header("Origin", "http://evil.test")
+                        .header("Access-Control-Request-Method", "POST")
+                        .header("Access-Control-Request-Headers", "Content-Type"))
+                .andExpect(status().isForbidden())
+                .andExpect(header().doesNotExist("Access-Control-Allow-Origin"));
     }
 
     /** Поля name, email, email_verified — стандартные для OpenID Connect, их понимает любой клиент. */

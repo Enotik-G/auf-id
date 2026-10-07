@@ -257,7 +257,7 @@ Remote: `https://github.com/Enotik-G/planchik.git`. Установлен `gh` CL
 Задача 3 (выдача JWT) целиком в `master`: 3.1–3.3 — PR #10, 3.4 — ветка `feature/fieldsIn-email-name`.
 Осталось 3.5 — исправление находок ревью безопасности (список в плане работ выше).
 
-**Секреты и локальные настройки — в `.env`** (в `.gitignore`): `PASSWORD_PEPPER`, `CAPTCHA_SECRET`, `JWT_SIGNING_KEY` — все без умолчаний; плюс `AUTH_DEV_CLIENT_ENABLED=true`, без них приложение не стартует. Ключ подписи генерировать так (OpenSSL 3 без `pkcs8 -topk8` выдаёт старый формат SEC1, Java его не читает): `openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 | openssl pkcs8 -topk8 -nocrypt -outform DER | base64 -w0`. Сменить ключ = все выданные токены станут недействительны. **В тестах** секреты задаёт `src/test/resources/config/application.properties` (Spring Boot читает его поверх основного), в аннотациях тестов их не повторять.
+**Секреты и локальные настройки — в `.env`** (в `.gitignore`): `PASSWORD_PEPPER`, `CAPTCHA_SECRET`, `JWT_SIGNING_KEY` — все без умолчаний; плюс `AUTH_DEV_CLIENT_ENABLED=true`, `AUTH_CORS_ALLOWED_ORIGINS` (пусто по умолчанию — CORS отключен), без них приложение не стартует. Ключ подписи генерировать так (OpenSSL 3 без `pkcs8 -topk8` выдаёт старый формат SEC1, Java его не читает): `openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 | openssl pkcs8 -topk8 -nocrypt -outform DER | base64 -w0`. Сменить ключ = все выданные токены станут недействительны. **В тестах** секреты задаёт `src/test/resources/config/application.properties` (Spring Boot читает его поверх основного), в аннотациях тестов их не повторять.
 
 Вход (пакет `login`): `AccountUserDetailsService` (ищет по почте, входят только `ACTIVE`), `PepperedPasswordEncoder` (переходник Spring Security → `PasswordHasher`), `LoginConfiguration` (свой `DaoAuthenticationProvider`: «не подтверждена» проверяется **после** пароля, «заблокирован» — **до**), страницы `/login` (`?error`, `?unconfirmed`, `?logout`) и `/`, `LastLoginRecorder`. Общий стиль — `static/css/auth.css`.
 
@@ -287,14 +287,11 @@ Remote: `https://github.com/Enotik-G/planchik.git`. Установлен `gh` CL
 
 ### Следующий шаг
 
-**Шаг 8 дорожной карты: переименование в AUF ID** (`ru.auf.id`, артефакт `auf-id`, репозиторий `auf-id`).
-Дальше шаг 9 — CORS, и веха 1 закрыта.
+**Шаги 8–9 выполнены:** переименование в AUF ID (шаг 8, PR #23), CORS (шаг 9, PR #25). Веха 1 закрыта.
 
-Шаги 1–7 сделаны: роли и claim `roles`, первый админ из конфигурации, выдача учёток
-администратором и страница активации, Admin API (пользователи и клиенты), удаление почты.
+Веха 2 (шаги 10–15): лимит на `/oauth2/token` (600/мин, решено 2026-10-07), ES256 в discovery, отзыв авторизаций при блокировке, очистка истёкших авторизаций, GitHub Actions, актуализация CLAUDE.md, хеширование токенов в БД.
 
-Задача 3.5 переехала в веху 2 (шаги 10–15). Решение по застрявшему вопросу принято
-**2026-10-07: лимит на `/oauth2/token` — 600/мин.**
+Задача 3.5 (находки ревью безопасности) размазана по нескольким задачам ночи (лимит, отзыв, очистка, хеширование).
 
 Новая находка в копилку 3.5 (шаг 14): discovery объявляет
 `id_token_signing_alg_values_supported: ["RS256"]`, а JWKS отдаёт ключ EC P-256 / ES256.
