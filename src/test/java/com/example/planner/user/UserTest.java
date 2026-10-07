@@ -46,4 +46,49 @@ class UserTest {
 
         assertThatThrownBy(user::verifyEmail).isInstanceOf(IllegalStateException.class);
     }
+
+    @Test
+    void newUserHasNoRoles() {
+        assertThat(user.getRoles()).isEmpty();
+        assertThat(user.hasRole(Role.STUDENT)).isFalse();
+    }
+
+    @Test
+    void grantsRole() {
+        user.grantRole(Role.CURATOR);
+
+        assertThat(user.hasRole(Role.CURATOR)).isTrue();
+        assertThat(user.getRoles()).containsExactly(Role.CURATOR);
+    }
+
+    @Test
+    void grantingTheSameRoleTwiceChangesNothing() {
+        user.grantRole(Role.ADMIN);
+        user.grantRole(Role.ADMIN);
+
+        assertThat(user.getRoles()).containsExactly(Role.ADMIN);
+    }
+
+    @Test
+    void revokesRole() {
+        user.grantRole(Role.ADMIN);
+        user.revokeRole(Role.ADMIN);
+
+        assertThat(user.hasRole(Role.ADMIN)).isFalse();
+        assertThat(user.getRoles()).isEmpty();
+    }
+
+    @Test
+    void revokingARoleTheUserDoesNotHaveChangesNothing() {
+        user.revokeRole(Role.ADMIN);
+
+        assertThat(user.getRoles()).isEmpty();
+    }
+
+    /** Роли меняют только через grantRole/revokeRole — иначе проверки обойдут мимо сущности. */
+    @Test
+    void rolesCannotBeChangedThroughTheGetter() {
+        assertThatThrownBy(() -> user.getRoles().add(Role.ADMIN))
+                .isInstanceOf(UnsupportedOperationException.class);
+    }
 }
