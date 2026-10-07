@@ -108,6 +108,19 @@ public class User {
         status = UserStatus.ACTIVE;
     }
 
+    /**
+     * Владелец выданной учётки задал пароль — аккаунт становится активным.
+     *
+     * <p>{@code emailVerified} не меняем: переход по ссылке доказывает, что человек получил ссылку от
+     * администратора, а не что он владеет почтовым ящиком.
+     */
+    public void activate() {
+        if (status != UserStatus.INVITED) {
+            throw new IllegalStateException("Активировать можно только учётку в статусе INVITED, сейчас " + status);
+        }
+        status = UserStatus.ACTIVE;
+    }
+
     /** Отметить успешный вход. */
     public void recordLogin(Instant at) {
         lastLoginAt = at;

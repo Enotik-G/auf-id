@@ -116,4 +116,37 @@ class UserTest {
 
         assertThatThrownBy(invited::verifyEmail).isInstanceOf(IllegalStateException.class);
     }
+
+    @Test
+    void activationMakesInvitedUserActive() {
+        User invited = User.invited(new EmailAddress("student@college.ru"), "Иван Иванов");
+
+        invited.activate();
+
+        assertThat(invited.getStatus()).isEqualTo(UserStatus.ACTIVE);
+    }
+
+    @Test
+    void cannotActivateTwice() {
+        User invited = User.invited(new EmailAddress("student@college.ru"), "Иван Иванов");
+        invited.activate();
+
+        assertThatThrownBy(invited::activate).isInstanceOf(IllegalStateException.class);
+    }
+
+    /** Путь активации — только для выданных админом учёток; саморегистрация идёт через verifyEmail. */
+    @Test
+    void cannotActivateSelfRegisteredUser() {
+        assertThatThrownBy(user::activate).isInstanceOf(IllegalStateException.class);
+    }
+
+    /** Переход по ссылке доказывает получение ссылки, а не владение ящиком. */
+    @Test
+    void activationDoesNotVerifyEmail() {
+        User invited = User.invited(new EmailAddress("student@college.ru"), "Иван Иванов");
+
+        invited.activate();
+
+        assertThat(invited.isEmailVerified()).isFalse();
+    }
 }
