@@ -240,7 +240,7 @@ Remote: `https://github.com/Enotik-G/planchik.git`. Установлен `gh` CL
 - [ ] 13. Контракт для сервиса планирования (как он проверяет JWT и какие claims получает)
 - [ ] 14. Тесты безопасности
 
-Ещё не сделано из каркаса: **GitHub Actions** (build + tests). Testcontainers подключены: тесты с БД делают `@Import(TestcontainersConfiguration.class)` и поднимают свой чистый Postgres 18, локальный `docker compose` для тестов не нужен (но нужен запущенный Docker).
+Testcontainers подключены: тесты с БД делают `@Import(TestcontainersConfiguration.class)` и поднимают свой чистый Postgres 18, локальный `docker compose` для тестов не нужен (но нужен запущенный Docker).
 
 ### Принципы безопасности (из документа)
 
@@ -293,8 +293,8 @@ Remote: `https://github.com/Enotik-G/planchik.git`. Установлен `gh` CL
 **Веха 2:** шаги 10–15 (2026-10-08 ночь):
 - [x] Шаг 10: лимит на `/oauth2/token` (600/мин, решено 2026-10-07)
 - [x] Шаг 14: ES256 в discovery (решено 2026-10-08)
-- [x] Шаг 13: отзыв авторизаций при блокировке (в этой сессии — готово к мержу)
-- [ ] Шаг 11: очистка истёкших авторизаций (`@Scheduled`, блокировка в Redis)
+- [x] Шаг 13: отзыв авторизаций при блокировке (решено 2026-10-08)
+- [x] Шаг 11: очистка истёкших авторизаций (`@Scheduled`, блокировка в Redis, решено 2026-10-08)
 - [ ] Шаг 12: хеширование кодов и токенов в БД (SHA-256, свой `OAuth2AuthorizationService`)
-- [ ] Шаг 22: GitHub Actions
-- [ ] Актуализация CLAUDE.md
+- [x] Шаг 22: GitHub Actions (.github/workflows/build.yml, trigger push:master и PR, решено 2026-10-08)
+- [ ] Актуализация CLAUDE.md (задача 7)
