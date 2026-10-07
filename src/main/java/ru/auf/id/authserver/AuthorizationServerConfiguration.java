@@ -7,12 +7,16 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
+import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
 import org.springframework.security.web.util.matcher.MediaTypeRequestMatcher;
+import org.springframework.security.web.util.matcher.OrRequestMatcher;
+import org.springframework.security.web.util.matcher.RequestMatcher;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -35,7 +39,11 @@ public class AuthorizationServerConfiguration {
         http
                 .oauth2AuthorizationServer(authorizationServer -> {
                     // Эта цепочка — только для адресов сервера авторизации.
-                    http.securityMatcher(authorizationServer.getEndpointsMatcher());
+                    // Плюс предварительные запросы браузера (OPTIONS): ручка токена принимает только POST,
+                    // и без этого preflight попал бы в основную цепочку, где CORS нет.
+                    http.securityMatcher(new OrRequestMatcher(
+                            authorizationServer.getEndpointsMatcher(),
+                            preflightToAuthorizationServer()));
                     // OpenID Connect: id_token, /userinfo, /.well-known/openid-configuration.
                     authorizationServer.oidc(Customizer.withDefaults());
                 })
@@ -51,6 +59,15 @@ public class AuthorizationServerConfiguration {
                         new LoginUrlAuthenticationEntryPoint("/login"),
                         new MediaTypeRequestMatcher(MediaType.TEXT_HTML)));
         return http.build();
+    }
+
+    /** Предварительный запрос (OPTIONS) к адресам сервера авторизации, которые читают из JavaScript. */
+    private static RequestMatcher preflightToAuthorizationServer() {
+        PathPatternRequestMatcher.Builder paths = PathPatternRequestMatcher.withDefaults();
+        return new OrRequestMatcher(
+                paths.matcher(HttpMethod.OPTIONS, "/oauth2/**"),
+                paths.matcher(HttpMethod.OPTIONS, "/userinfo"),
+                paths.matcher(HttpMethod.OPTIONS, "/.well-known/**"));
     }
 
     /**
