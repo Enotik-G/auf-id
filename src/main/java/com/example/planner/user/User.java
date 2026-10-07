@@ -77,6 +77,24 @@ public class User {
         return user;
     }
 
+    /**
+     * Учётка, созданная администратором: пароля ещё нет, владелец задаст его по ссылке активации.
+     *
+     * <p>{@code emailVerified} остаётся {@code false}, и это не упущение. По OpenID Connect это поле
+     * означает «владелец доказал, что адрес его». Админ, назначивший доменную почту, этого не
+     * доказывал, а доступа к самому ящику у студентов нет — проверять нечем. Значит честный ответ
+     * «нет». Сервисам экосистемы на это поле опираться нельзя.
+     */
+    public static User invited(EmailAddress email, String fullName) {
+        User user = new User();
+        user.email = email;
+        user.fullName = fullName;
+        user.emailVerified = false;
+        user.status = UserStatus.INVITED;
+        user.createdAt = Instant.now();
+        return user;
+    }
+
     public boolean isAwaitingEmailVerification() {
         return status == UserStatus.PENDING_VERIFICATION;
     }

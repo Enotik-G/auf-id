@@ -91,4 +91,29 @@ class UserTest {
         assertThatThrownBy(() -> user.getRoles().add(Role.ADMIN))
                 .isInstanceOf(UnsupportedOperationException.class);
     }
+
+    @Test
+    void invitedUserWaitsForActivationNotForEmailConfirmation() {
+        User invited = User.invited(new EmailAddress("student@college.ru"), "Иван Иванов");
+
+        assertThat(invited.getStatus()).isEqualTo(UserStatus.INVITED);
+        assertThat(invited.isAwaitingEmailVerification()).isFalse();
+        assertThat(invited.getRoles()).isEmpty();
+    }
+
+    /** Почту админ не подтверждал: он назначил адрес, а доступа к ящику у студента нет. */
+    @Test
+    void invitedUserHasUnverifiedEmail() {
+        User invited = User.invited(new EmailAddress("student@college.ru"), "Иван Иванов");
+
+        assertThat(invited.isEmailVerified()).isFalse();
+    }
+
+    /** Путь подтверждения почты к выданным учёткам не относится — их активируют по ссылке. */
+    @Test
+    void invitedUserCannotGoThroughEmailConfirmation() {
+        User invited = User.invited(new EmailAddress("student@college.ru"), "Иван Иванов");
+
+        assertThatThrownBy(invited::verifyEmail).isInstanceOf(IllegalStateException.class);
+    }
 }
