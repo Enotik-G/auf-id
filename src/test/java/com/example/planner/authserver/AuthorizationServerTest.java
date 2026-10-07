@@ -5,6 +5,7 @@ import com.example.planner.user.EmailAddress;
 import com.example.planner.user.PasswordCredential;
 import com.example.planner.user.PasswordCredentialRepository;
 import com.example.planner.user.PasswordHasher;
+import com.example.planner.user.Role;
 import com.example.planner.user.User;
 import com.example.planner.user.UserRepository;
 import com.jayway.jsonpath.JsonPath;
@@ -239,6 +240,54 @@ class AuthorizationServerTest {
         assertThat(accessToken.hasClaim("name")).isFalse();
         assertThat(accessToken.hasClaim("email")).isFalse();
         assertThat(accessToken.hasClaim("email_verified")).isFalse();
+    }
+
+    @Test
+    void accessTokenCarriesRolesOfTheUser() throws Exception {
+        user.grantRole(Role.CURATOR);
+        user.grantRole(Role.STUDENT);
+        userRepository.save(user);
+
+        Jwt accessToken = jwtDecoder.decode(JsonPath.read(exchangeCodeForTokens(authorize()), "$.access_token"));
+
+        assertThat(accessToken.getClaimAsStringList("roles")).containsExactly("CURATOR", "STUDENT");
+    }
+
+    /** Роли решают «пускать или нет» — это дело access token; id token только говорит, кто вошёл. */
+    @Test
+    void idTokenDoesNotCarryRoles() throws Exception {
+        user.grantRole(Role.ADMIN);
+        userRepository.save(user);
+
+        Jwt idToken = jwtDecoder.decode(JsonPath.read(exchangeCodeForTokens(authorize()), "$.id_token"));
+
+        assertThat(idToken.hasClaim("roles")).isFalse();
+    }
+
+    /** Claim есть всегда, пусть и пустой: клиенту не нужно отличать «нет ролей» от «нет поля». */
+    @Test
+    void userWithoutRolesGetsEmptyRolesClaim() throws Exception {
+        Jwt accessToken = jwtDecoder.decode(JsonPath.read(exchangeCodeForTokens(authorize()), "$.access_token"));
+
+        assertThat(accessToken.hasClaim("roles")).isTrue();
+        assertThat(accessToken.getClaimAsStringList("roles")).isEmpty();
+    }
+
+    /**
+     * Страж ловушки: выданная авторизация сохраняется в БД как JSON, а {@code /userinfo} поднимает её
+     * обратно. Если claim с ролями собрать неизменяемой коллекцией JDK, Jackson откажется её прочитать
+     * ({@code ImmutableCollections$ListN} нет в списке разрешённых типов) — и отвалится именно здесь,
+     * а не при выдаче токена.
+     */
+    @Test
+    void rolesDoNotBreakReadingTheAuthorizationBack() throws Exception {
+        user.grantRole(Role.ADMIN);
+        userRepository.save(user);
+        String accessToken = JsonPath.read(exchangeCodeForTokens(authorize()), "$.access_token");
+
+        mockMvc.perform(get("/userinfo").header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.sub").value(user.getId().toString()));
     }
 
     /** Поля name, email, email_verified — стандартные для OpenID Connect, их понимает любой клиент. */
