@@ -9,3 +9,5 @@ databaseChangeLog:
       file: db/changelog/changes/004-create-one-time-tokens.sql
   - include:
       file: db/changelog/changes/005-create-oauth2-tables.sql
+  - include:
+      file: db/changelog/changes/006-create-user-roles.sql
