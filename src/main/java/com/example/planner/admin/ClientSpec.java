@@ -1,5 +1,7 @@
 package com.example.planner.admin;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import java.util.Set;
 
 /**
@@ -12,12 +14,30 @@ import java.util.Set;
  * @param postLogoutRedirectUris куда вернуть после выхода; необязательны
  * @param scopes                 запрашиваемые права; пустой набор означает openid, profile, email
  */
+@Schema(description = "Настройки нового клиента")
 public record ClientSpec(
+
+        @Schema(description = "Короткое имя сервиса: строчные латинские буквы, цифры, дефисы", example = "planner")
         String clientId,
+
+        @Schema(description = "Название для человека", example = "Планировщик")
         String name,
+
+        @Schema(description = """
+                PUBLIC — браузерное или мобильное приложение, без секрета, с PKCE.
+                CONFIDENTIAL — серверное приложение, с секретом.
+                SERVICE — сервис к сервису, поток client_credentials, без адресов возврата.""")
         ClientKind kind,
+
+        @Schema(description = "Адреса возврата: абсолютные, без фрагмента. Для SERVICE должны быть пустыми.",
+                example = "[\"https://planner.college.ru/callback\"]")
         Set<String> redirectUris,
+
+        @Schema(description = "Куда вернуть после выхода", example = "[\"https://planner.college.ru/\"]")
         Set<String> postLogoutRedirectUris,
+
+        @Schema(description = "Права. Пусто — openid, profile, email; для SERVICE обязательны.",
+                example = "[\"openid\",\"profile\",\"email\"]")
         Set<String> scopes
 ) {
     public ClientSpec {
