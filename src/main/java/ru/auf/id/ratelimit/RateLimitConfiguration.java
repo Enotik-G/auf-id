@@ -55,7 +55,7 @@ public class RateLimitConfiguration {
     @Bean
     FilterRegistrationBean<RateLimitFilter> rateLimitFilter(RateLimiter rateLimiter) {
         FilterRegistrationBean<RateLimitFilter> registration = new FilterRegistrationBean<>(new RateLimitFilter(rateLimiter));
-        registration.addUrlPatterns(RateLimitFilter.LOGIN_PATH);
+        registration.addUrlPatterns(RateLimitFilter.LOGIN_PATH, RateLimitFilter.TOKEN_PATH);
         // Самый первый: раньше капчи (DEFAULT_FILTER_ORDER - 1) и Spring Security —
         // лишняя попытка отклоняется до любой другой работы.
         registration.setOrder(SecurityFilterProperties.DEFAULT_FILTER_ORDER - 2);

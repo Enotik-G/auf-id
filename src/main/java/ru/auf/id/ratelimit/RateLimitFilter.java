@@ -5,6 +5,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
@@ -15,7 +16,8 @@ import java.util.Arrays;
 
 /**
  * Отсекает слишком частые попытки входа с одного IP — ещё до Spring Security, то есть до проверки
- * пароля: лишние попытки даже не тратят Argon2.
+ * пароля: лишние попытки даже не тратят Argon2. Так же ограничивает обмен кода на токен
+ * ({@code POST /oauth2/token}): лишний запрос не доходит ни до БД, ни до подписи токена.
  *
  * <p>Активацию по ссылке не ограничиваем: там один индексированный поиск по хешу токена, сам токен
  * 256-битный и перебору не поддаётся, а пароль хешируется уже после проверки токена. Зато лимит по IP
@@ -25,6 +27,7 @@ import java.util.Arrays;
 public class RateLimitFilter extends OncePerRequestFilter {
 
     static final String LOGIN_PATH = "/login";
+    static final String TOKEN_PATH = "/oauth2/token";
 
     private final RateLimiter rateLimiter;
 
@@ -46,8 +49,14 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
         long retryAfterSeconds = Math.max(1, decision.retryAfter().toSeconds());
         response.setHeader("Retry-After", String.valueOf(retryAfterSeconds));
-        // Страница входа — для людей: возвращаем на неё с понятным сообщением.
-        response.sendRedirect(request.getContextPath() + LOGIN_PATH + "?tooManyAttempts");
+        if (limit == RateLimit.LOGIN) {
+            // Страница входа — для людей: возвращаем на неё с понятным сообщением.
+            response.sendRedirect(request.getContextPath() + LOGIN_PATH + "?tooManyAttempts");
+        } else {
+            // Ручку токена вызывает программа-клиент: ей нужен код ответа, а не страница.
+            // 429 Too Many Requests + Retry-After — сколько секунд подождать перед повтором.
+            response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
+        }
     }
 
     /**
@@ -77,6 +86,10 @@ public class RateLimitFilter extends OncePerRequestFilter {
         }
         // Путь без префикса приложения. Не getServletPath(): в тестах (MockMvc) он пустой.
         String path = request.getRequestURI().substring(request.getContextPath().length());
-        return LOGIN_PATH.equals(path) ? RateLimit.LOGIN : null;
+        return switch (path) {
+            case LOGIN_PATH -> RateLimit.LOGIN;
+            case TOKEN_PATH -> RateLimit.TOKEN;
+            default -> null;
+        };
     }
 }
