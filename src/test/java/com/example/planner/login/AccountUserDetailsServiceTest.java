@@ -4,6 +4,7 @@ import com.example.planner.TestcontainersConfiguration;
 import com.example.planner.user.EmailAddress;
 import com.example.planner.user.PasswordCredential;
 import com.example.planner.user.PasswordCredentialRepository;
+import com.example.planner.user.Role;
 import com.example.planner.user.User;
 import com.example.planner.user.UserRepository;
 import org.junit.jupiter.api.Test;
@@ -60,6 +61,31 @@ class AccountUserDetailsServiceTest {
     void malformedEmailIsNotFoundInsteadOfCrashing() {
         assertThatThrownBy(() -> service.loadUserByUsername("not-an-email"))
                 .isInstanceOf(UsernameNotFoundException.class);
+    }
+
+    /**
+     * Без этого вошедший администратор выглядел бы как пользователь без единого полномочия,
+     * и правило hasRole("ADMIN") в админке не сработало бы никогда.
+     */
+    @Test
+    void rolesBecomeAuthoritiesWithRolePrefix() {
+        User user = saveUser("boss@college.ru", true);
+        user.grantRole(Role.ADMIN);
+        user.grantRole(Role.CURATOR);
+        userRepository.save(user);
+
+        UserDetails details = service.loadUserByUsername("boss@college.ru");
+
+        assertThat(details.getAuthorities())
+                .extracting(Object::toString)
+                .containsExactlyInAnyOrder("ROLE_ADMIN", "ROLE_CURATOR");
+    }
+
+    @Test
+    void userWithoutRolesHasNoAuthorities() {
+        saveUser("ivan@mail.ru", true);
+
+        assertThat(service.loadUserByUsername("ivan@mail.ru").getAuthorities()).isEmpty();
     }
 
     private User saveUser(String email, boolean confirmed) {

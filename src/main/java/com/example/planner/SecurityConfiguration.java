@@ -9,7 +9,10 @@ import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.DisabledException;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.core.AuthenticationException;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.HttpStatusEntryPoint;
+import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 
 import java.io.IOException;
@@ -39,6 +42,9 @@ public class SecurityConfiguration {
                         .requestMatchers("/css/**", "/js/**").permitAll()
                         // Задачка капчи — её запрашивает страница входа, то есть ещё не вошедший человек.
                         .requestMatchers(HttpMethod.GET, "/captcha/challenge").permitAll()
+                        // Админка: только для роли ADMIN. Правило стоит до anyRequest(),
+                        // иначе достаточно было бы просто войти.
+                        .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
                         // Документация API.
                         .requestMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
                         // Страница ошибок Spring: без этого любая ошибка превращалась бы в 401.
@@ -49,6 +55,19 @@ public class SecurityConfiguration {
                         .csrfTokenRepository(new CookieCsrfTokenRepository())
                         // JSON-API не использует cookie для входа, CSRF-атака на него невозможна.
                         .ignoringRequestMatchers("/api/**"))
+                // Браузеру без входа показываем страницу логина, а API отвечаем 401: редирект на
+                // HTML-форму в ответ на запрос JSON админ-панель разобрать не сможет.
+                //
+                // Вторая точка входа обязательна, хотя и выглядит лишней: если зарегистрировать
+                // только одну, Spring применит её ко всем запросам, не глядя на матчер, и страница
+                // входа перестанет открываться.
+                .exceptionHandling(handling -> handling
+                        .defaultAuthenticationEntryPointFor(
+                                new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED),
+                                request -> request.getRequestURI().startsWith("/api/"))
+                        .defaultAuthenticationEntryPointFor(
+                                new LoginUrlAuthenticationEntryPoint("/login"),
+                                request -> true))
                 .formLogin(form -> form
                         // Своя страница входа (LoginPageController); открыта выше, в authorizeHttpRequests.
                         .loginPage("/login")

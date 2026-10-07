@@ -1,0 +1,39 @@
+package com.example.planner.admin;
+
+import com.example.planner.user.Role;
+import com.example.planner.user.User;
+import io.swagger.v3.oas.annotations.media.Schema;
+
+import java.time.Instant;
+import java.util.Set;
+import java.util.UUID;
+
+@Schema(description = "Учётная запись глазами администратора")
+public record UserResponse(
+
+        @Schema(example = "0199bc42-8f31-7a1e-9c55-2b7d4e6a1f90")
+        UUID id,
+
+        @Schema(example = "ivan.petrov@college.ru")
+        String email,
+
+        @Schema(example = "Иван Петров")
+        String fullName,
+
+        @Schema(description = "INVITED — ждёт активации, ACTIVE — работает, BLOCKED — доступ закрыт",
+                example = "ACTIVE")
+        String status,
+
+        @Schema(example = "[\"STUDENT\"]")
+        Set<Role> roles,
+
+        Instant createdAt,
+
+        @Schema(description = "Последний успешный вход; null, если ни разу не входил")
+        Instant lastLoginAt
+) {
+    public static UserResponse of(User user) {
+        return new UserResponse(user.getId(), user.getEmail().value(), user.getFullName(),
+                user.getStatus().name(), user.getRoles(), user.getCreatedAt(), user.getLastLoginAt());
+    }
+}
