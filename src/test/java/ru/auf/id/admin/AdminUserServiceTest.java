@@ -2,6 +2,7 @@ package ru.auf.id.admin;
 
 import ru.auf.id.ClockConfiguration;
 import ru.auf.id.TestcontainersConfiguration;
+import ru.auf.id.authserver.UserAuthorizationRevoker;
 import ru.auf.id.onetimetoken.InvalidOneTimeTokenException;
 import ru.auf.id.onetimetoken.OneTimeTokenService;
 import ru.auf.id.onetimetoken.TokenPurpose;
@@ -26,7 +27,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @DataJpaTest
 @Import({TestcontainersConfiguration.class, ClockConfiguration.class,
-        AdminUserService.class, OneTimeTokenService.class, PasswordHasher.class})
+        AdminUserService.class, OneTimeTokenService.class, PasswordHasher.class,
+        UserAuthorizationRevoker.class})
 class AdminUserServiceTest {
 
     @Autowired

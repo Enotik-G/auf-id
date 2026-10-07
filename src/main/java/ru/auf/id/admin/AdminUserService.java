@@ -1,5 +1,6 @@
 package ru.auf.id.admin;
 
+import ru.auf.id.authserver.UserAuthorizationRevoker;
 import ru.auf.id.onetimetoken.OneTimeTokenService;
 import ru.auf.id.onetimetoken.TokenPurpose;
 import ru.auf.id.user.PasswordCredentialRepository;
@@ -27,6 +28,7 @@ public class AdminUserService {
     private final UserRepository userRepository;
     private final PasswordCredentialRepository credentialRepository;
     private final OneTimeTokenService tokenService;
+    private final UserAuthorizationRevoker authorizationRevoker;
 
     /**
      * Закрывает доступ и обесценивает ожидающие ссылки.
@@ -34,8 +36,9 @@ public class AdminUserService {
      * <p>Ссылки гасим потому, что неиспользованная ссылка активации или сброса пароля — это
      * отложенный вход: заблокировали человека, а он через час активировался по старой ссылке.
      *
-     * <p>Уже выданные access-токены продолжат работать до истечения (до 10 минут) — их отзыв
-     * относится к серверу авторизации и делается отдельно (задача 3.5).
+     * <p>Всё, что сервер авторизации выдал пользователю (коды, токены), удаляем в той же транзакции:
+     * не удалась блокировка — не удалится и это, и наоборот. Access token, уже ушедший в сервис
+     * экосистемы, доживёт свои 10 минут — сервисы проверяют подпись сами, к нам не ходят.
      *
      * @throws LastAdminException если это последний действующий администратор
      */
@@ -49,6 +52,7 @@ public class AdminUserService {
         user.block();
         tokenService.revokeAll(user, TokenPurpose.INVITE);
         tokenService.revokeAll(user, TokenPurpose.PASSWORD_RESET);
+        authorizationRevoker.revokeAll(userId);
     }
 
     /**
