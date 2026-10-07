@@ -13,6 +13,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.HexFormat;
+import java.util.List;
 
 /**
  * Выдаёт и гасит одноразовые токены для ссылок из писем.
@@ -47,6 +48,19 @@ public class OneTimeTokenService {
                 .orElseThrow(InvalidOneTimeTokenException::new);
         token.markUsed(Instant.now(clock));
         return token.getUser();
+    }
+
+    /**
+     * Обесценивает все живые токены этого назначения у пользователя.
+     *
+     * @return сколько ссылок перестало работать
+     */
+    @Transactional
+    public int revokeAll(User user, TokenPurpose purpose) {
+        List<OneTimeToken> live = repository.findByUserIdAndPurposeAndUsedAtIsNull(user.getId(), purpose);
+        Instant now = Instant.now(clock);
+        live.forEach(token -> token.revoke(now));
+        return live.size();
     }
 
     private static String generateRawToken() {

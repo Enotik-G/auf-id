@@ -12,6 +12,7 @@ import com.example.planner.user.PasswordHasher;
 import com.example.planner.user.Role;
 import com.example.planner.user.User;
 import com.example.planner.user.UserRepository;
+import com.example.planner.user.UserNotFoundException;
 import com.example.planner.user.UserStatus;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,6 +20,7 @@ import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.context.annotation.Import;
 
 import java.util.Set;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -188,5 +190,55 @@ class ProvisioningServiceTest {
 
         assertThatThrownBy(() -> provisioning.activate(secondLink, "attacker password"))
                 .isInstanceOf(InvalidOneTimeTokenException.class);
+    }
+
+    @Test
+    void reissuedLinkWorksAndThePreviousOneStopsWorking() {
+        Invitation first = provisioning.invite(EMAIL, "Иван Иванов", Set.of(Role.STUDENT));
+
+        Invitation second = provisioning.reissueInvitation(first.userId());
+
+        assertThat(second.userId()).isEqualTo(first.userId());
+        assertThat(second.activationToken()).isNotEqualTo(first.activationToken());
+
+        assertThatThrownBy(() -> provisioning.activate(first.activationToken(), "correct horse battery staple"))
+                .isInstanceOf(InvalidOneTimeTokenException.class);
+
+        provisioning.activate(second.activationToken(), "correct horse battery staple");
+        assertThat(userRepository.findById(first.userId()).orElseThrow().getStatus())
+                .isEqualTo(UserStatus.ACTIVE);
+    }
+
+    /** Старая ссылка могла уйти не туда — именно поэтому и просят новую. */
+    @Test
+    void reissueRevokesEveryPreviousLink() {
+        Invitation first = provisioning.invite(EMAIL, "Иван Иванов", Set.of());
+        Invitation second = provisioning.reissueInvitation(first.userId());
+        Invitation third = provisioning.reissueInvitation(first.userId());
+
+        assertThatThrownBy(() -> provisioning.activate(first.activationToken(), "correct horse battery staple"))
+                .isInstanceOf(InvalidOneTimeTokenException.class);
+        assertThatThrownBy(() -> provisioning.activate(second.activationToken(), "correct horse battery staple"))
+                .isInstanceOf(InvalidOneTimeTokenException.class);
+
+        provisioning.activate(third.activationToken(), "correct horse battery staple");
+        assertThat(userRepository.findById(first.userId()).orElseThrow().getStatus())
+                .isEqualTo(UserStatus.ACTIVE);
+    }
+
+    @Test
+    void refusesReissueForUnknownUser() {
+        assertThatThrownBy(() -> provisioning.reissueInvitation(UUID.randomUUID()))
+                .isInstanceOf(UserNotFoundException.class);
+    }
+
+    @Test
+    void refusesReissueForAlreadyActiveAccount() {
+        Invitation invitation = provisioning.invite(EMAIL, "Иван Иванов", Set.of());
+        provisioning.activate(invitation.activationToken(), "correct horse battery staple");
+
+        assertThatThrownBy(() -> provisioning.reissueInvitation(invitation.userId()))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("ACTIVE");
     }
 }

@@ -101,6 +101,61 @@ class OneTimeTokenServiceTest {
     }
 
     /** Сервис с часами, которые всегда показывают заданный момент. */
+    @Test
+    void revokeAllMakesLiveLinkUnusable() {
+        OneTimeTokenService service = serviceAt(ISSUED_AT);
+        String rawToken = service.issue(user, TokenPurpose.INVITE);
+
+        int revoked = service.revokeAll(user, TokenPurpose.INVITE);
+
+        assertThat(revoked).isEqualTo(1);
+        assertThatThrownBy(() -> serviceAt(ISSUED_AT.plus(Duration.ofMinutes(1)))
+                .consume(rawToken, TokenPurpose.INVITE))
+                .isInstanceOf(InvalidOneTimeTokenException.class);
+    }
+
+    @Test
+    void revokeAllTouchesOnlyTheGivenPurpose() {
+        OneTimeTokenService service = serviceAt(ISSUED_AT);
+        String resetToken = service.issue(user, TokenPurpose.PASSWORD_RESET);
+        service.issue(user, TokenPurpose.INVITE);
+
+        service.revokeAll(user, TokenPurpose.INVITE);
+
+        assertThat(serviceAt(ISSUED_AT.plus(Duration.ofMinutes(1)))
+                .consume(resetToken, TokenPurpose.PASSWORD_RESET).getId())
+                .isEqualTo(user.getId());
+    }
+
+    @Test
+    void revokeAllTouchesOnlyTheGivenUser() {
+        User another = userRepository.save(User.selfRegistered(new EmailAddress("oleg@mail.ru"), "Олег Сидоров"));
+        OneTimeTokenService service = serviceAt(ISSUED_AT);
+        String othersToken = service.issue(another, TokenPurpose.INVITE);
+        service.issue(user, TokenPurpose.INVITE);
+
+        service.revokeAll(user, TokenPurpose.INVITE);
+
+        assertThat(serviceAt(ISSUED_AT.plus(Duration.ofMinutes(1)))
+                .consume(othersToken, TokenPurpose.INVITE).getId())
+                .isEqualTo(another.getId());
+    }
+
+    /** Уже использованную ссылку отзывать нечего — она и так не годна. */
+    @Test
+    void revokeAllCountsOnlyLiveLinks() {
+        OneTimeTokenService service = serviceAt(ISSUED_AT);
+        String rawToken = service.issue(user, TokenPurpose.INVITE);
+        serviceAt(ISSUED_AT.plus(Duration.ofMinutes(1))).consume(rawToken, TokenPurpose.INVITE);
+
+        assertThat(service.revokeAll(user, TokenPurpose.INVITE)).isZero();
+    }
+
+    @Test
+    void revokeAllOnUserWithoutLinksChangesNothing() {
+        assertThat(serviceAt(ISSUED_AT).revokeAll(user, TokenPurpose.INVITE)).isZero();
+    }
+
     private OneTimeTokenService serviceAt(Instant now) {
         return new OneTimeTokenService(tokenRepository, Clock.fixed(now, ZoneOffset.UTC));
     }
