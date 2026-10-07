@@ -69,6 +69,8 @@ Liquibase · Thymeleaf · Maven · Testcontainers.
   (после добавления в группу — **перезагрузка**, в GNOME перелогиниться недостаточно)
 - **OpenSSL** — для генерации секретов
 
+> Файл `.env` нужен **до** `docker compose up`: параметры базы читает и compose, и приложение.
+
 ### 1. Поднять базу, Redis и почтовую ловушку
 
 ```bash
@@ -93,6 +95,9 @@ PASSWORD_PEPPER=$(openssl rand -base64 48)
 CAPTCHA_SECRET=$(openssl rand -base64 48)
 JWT_SIGNING_KEY=$(openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 | openssl pkcs8 -topk8 -nocrypt -outform DER | base64 -w0)
 AUTH_DEV_CLIENT_ENABLED=true
+DB_NAME=auth
+DB_USER=auth
+DB_PASSWORD=$(openssl rand -base64 24 | tr -d '/+=' | head -c 24)
 EOF
 chmod 600 .env
 ```
@@ -146,6 +151,8 @@ docker compose exec redis redis-cli --scan --pattern 'rate:*'           | xargs 
 | `PASSWORD_PEPPER` | Секрет, подмешиваемый к паролям перед Argon2id. Не короче 32 символов. **Не менять.** | `openssl rand -base64 48` |
 | `CAPTCHA_SECRET` | Подпись задачек капчи. Можно менять. | `openssl rand -base64 48` |
 | `JWT_SIGNING_KEY` | Закрытый ключ подписи токенов: EC P-256, PKCS#8, base64 в одну строку. **Не менять** без плана ротации. | `openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 \| openssl pkcs8 -topk8 -nocrypt -outform DER \| base64 -w0` |
+| `DB_NAME` / `DB_USER` | Имя базы и пользователь. | `auth` / `auth` для локальной разработки |
+| `DB_PASSWORD` | Пароль БД. Умолчания нет намеренно: репозиторий публичный. | `openssl rand -base64 24 \| tr -d '/+=' \| head -c 24` |
 
 > ⚠️ В OpenSSL 3 без шага `openssl pkcs8 -topk8` ключ получается в старом формате (начинается с `MHcC…`),
 > Java его не прочитает. Правильный ключ начинается с `MIGH…`.
@@ -155,9 +162,7 @@ docker compose exec redis redis-cli --scan --pattern 'rate:*'           | xargs 
 | Переменная | По умолчанию | Что это |
 |---|---|---|
 | `AUTH_PUBLIC_URL` | `http://localhost:8080` | Адрес, по которому Auth открывают снаружи. Из него — `iss` в токенах и ссылки в письмах. |
-| `SPRING_DATASOURCE_URL` | `jdbc:postgresql://localhost:5432/auth` | Адрес БД |
-| `SPRING_DATASOURCE_USERNAME` | `auth` | Пользователь БД |
-| `DB_PASSWORD` | `auf67` (только для локальной БД!) | Пароль БД |
+| `DB_HOST` / `DB_PORT` | `localhost` / `5432` | Где искать базу |
 | `REDIS_HOST` / `REDIS_PORT` | `localhost` / `6379` | Redis. Пароль — `SPRING_DATA_REDIS_PASSWORD`. |
 | `MAIL_HOST` / `MAIL_PORT` | `localhost` / `1025` (Mailpit) | SMTP-сервер |
 | `MAIL_FROM` | `no-reply@auth.local` | Отправитель писем |
