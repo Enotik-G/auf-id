@@ -167,6 +167,7 @@ docker compose exec redis redis-cli --scan --pattern 'rate:*'           | xargs 
 | `MAIL_HOST` / `MAIL_PORT` | `localhost` / `1025` (Mailpit) | SMTP-сервер |
 | `MAIL_FROM` | `no-reply@auth.local` | Отправитель писем |
 | `SESSION_COOKIE_SECURE` | `false` | Cookie сессии только по HTTPS. **На сервере — `true`.** |
+| `BOOTSTRAP_ADMIN_EMAILS` | пусто | Почты первых администраторов через запятую. Роль `ADMIN` выдаётся им при входе. Пусто — механизм отключён. |
 | `AUTH_DEV_CLIENT_ENABLED` | `false` | Регистрировать клиента `planner-dev` для локальной разработки. **На сервере — не включать.** |
 | `SPRINGDOC_API_DOCS_ENABLED`, `SPRINGDOC_SWAGGER_UI_ENABLED` | `true` | Swagger. Можно выключить на сервере. |
 
@@ -174,6 +175,23 @@ docker compose exec redis redis-cli --scan --pattern 'rate:*'           | xargs 
 (`spring.mail.username` → `SPRING_MAIL_USERNAME`).
 
 ---
+
+## Первый администратор
+
+Роли выдаются через админку, но открыть её некому, пока нет ни одного администратора.
+Поэтому первых называют в настройках:
+
+```bash
+# .env
+BOOTSTRAP_ADMIN_EMAILS=director@college.ru,boss@college.ru
+```
+
+Роль `ADMIN` присваивается при **входе** такого пользователя — на старте приложения
+учётки может ещё не быть, и настройку пришлось бы применять перезапуском.
+
+Запись в список никогда не отнимает роль и не касается никого другого. Снять роль можно
+только через админку. Кривой адрес в списке уронит приложение при старте — это нарочно,
+иначе он тихо превратился бы в «администратора, который никогда не совпадёт».
 
 ## Адреса сервиса
 
