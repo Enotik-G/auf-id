@@ -2,6 +2,7 @@ package ru.auf.id.admin;
 
 import ru.auf.id.ClockConfiguration;
 import ru.auf.id.TestcontainersConfiguration;
+import ru.auf.id.authserver.UserAuthorizationRevoker;
 import ru.auf.id.onetimetoken.InvalidOneTimeTokenException;
 import ru.auf.id.onetimetoken.OneTimeTokenService;
 import ru.auf.id.onetimetoken.TokenPurpose;
@@ -18,6 +19,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.util.UUID;
 
@@ -26,7 +28,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @DataJpaTest
 @Import({TestcontainersConfiguration.class, ClockConfiguration.class,
-        AdminUserService.class, OneTimeTokenService.class, PasswordHasher.class})
+        AdminUserService.class, OneTimeTokenService.class, PasswordHasher.class,
+        UserAuthorizationRevoker.class})
 class AdminUserServiceTest {
 
     @Autowired
@@ -44,6 +47,9 @@ class AdminUserServiceTest {
     @Autowired
     private OneTimeTokenService tokenService;
 
+    @Autowired
+    private JdbcTemplate jdbc;
+
     @Test
     void blocksUser() {
         User student = activeUser("ivan@mail.ru");
@@ -51,6 +57,20 @@ class AdminUserServiceTest {
         admin.block(student.getId());
 
         assertThat(reload(student).getStatus()).isEqualTo(UserStatus.BLOCKED);
+    }
+
+    /** Выданные коды и токены не должны пережить блокировку: до refresh-токенов это закрываем заранее. */
+    @Test
+    void blockingRevokesIssuedAuthorizations() {
+        User student = activeUser("ivan@mail.ru");
+        User other = activeUser("petr@mail.ru");
+        insertAuthorization(student);
+        insertAuthorization(other);
+
+        admin.block(student.getId());
+
+        assertThat(authorizationsOf(student)).isZero();
+        assertThat(authorizationsOf(other)).isEqualTo(1);
     }
 
     /** Неиспользованная ссылка — это отложенный вход: заблокировали, а он активировался через час. */
@@ -168,6 +188,28 @@ class AdminUserServiceTest {
 
         assertThatThrownBy(() -> admin.block(missing)).isInstanceOf(UserNotFoundException.class);
         assertThatThrownBy(() -> admin.grantRole(missing, Role.STUDENT)).isInstanceOf(UserNotFoundException.class);
+    }
+
+    private void insertAuthorization(User owner) {
+        // авторизация ссылается на клиента внешним ключом; тест откатывается, поэтому клиент не мусорит
+        jdbc.update("""
+                INSERT INTO oauth2_registered_client
+                    (id, client_id, client_name, client_authentication_methods,
+                     authorization_grant_types, scopes, client_settings, token_settings)
+                VALUES (?, ?, 'Тестовый клиент', 'none', 'authorization_code', 'openid', '{}', '{}')
+                ON CONFLICT DO NOTHING
+                """, "admin-test-client", "admin-test-client");
+        jdbc.update("""
+                INSERT INTO oauth2_authorization
+                    (id, registered_client_id, principal_name, authorization_grant_type)
+                VALUES (?, 'admin-test-client', ?, 'authorization_code')
+                """, UUID.randomUUID().toString(), owner.getId().toString());
+    }
+
+    private int authorizationsOf(User owner) {
+        return jdbc.queryForObject(
+                "SELECT count(*) FROM oauth2_authorization WHERE principal_name = ?",
+                Integer.class, owner.getId().toString());
     }
 
     private User activeUser(String email) {
