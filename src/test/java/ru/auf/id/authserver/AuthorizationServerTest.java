@@ -304,6 +304,20 @@ class AuthorizationServerTest {
                 .andExpect(header().string("Access-Control-Allow-Origin", "http://planner.test"));
     }
 
+    /**
+     * Чужой сайт (не из {@code auth.cors.allowed-origins}) разрешения не получает: Spring отвечает 403,
+     * и заголовка {@code Access-Control-Allow-Origin} в ответе нет.
+     */
+    @Test
+    void preflightFromUnknownOriginIsRejected() throws Exception {
+        mockMvc.perform(options("/oauth2/token")
+                        .header("Origin", "http://evil.test")
+                        .header("Access-Control-Request-Method", "POST")
+                        .header("Access-Control-Request-Headers", "Content-Type"))
+                .andExpect(status().isForbidden())
+                .andExpect(header().doesNotExist("Access-Control-Allow-Origin"));
+    }
+
     /** Поля name, email, email_verified — стандартные для OpenID Connect, их понимает любой клиент. */
     private void assertUserClaims(Jwt token) {
         assertThat(token.getClaimAsString("name")).isEqualTo("Иван Петров");
