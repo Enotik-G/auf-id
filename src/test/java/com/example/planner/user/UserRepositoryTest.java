@@ -8,6 +8,8 @@ import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
 import org.springframework.context.annotation.Import;
 import org.springframework.dao.DataIntegrityViolationException;
 
+import java.util.UUID;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -56,5 +58,51 @@ class UserRepositoryTest {
 
         assertThatThrownBy(() -> userRepository.saveAndFlush(duplicate))
                 .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void rolesSurviveSaveAndLoad() {
+        User user = User.selfRegistered(new EmailAddress("curator@college.ru"), "Олег Сидоров");
+        user.grantRole(Role.CURATOR);
+        user.grantRole(Role.STUDENT);
+        User saved = userRepository.save(user);
+        entityManager.flush();
+        entityManager.clear();
+
+        User loaded = userRepository.findById(saved.getId()).orElseThrow();
+
+        assertThat(loaded.getRoles()).containsExactlyInAnyOrder(Role.CURATOR, Role.STUDENT);
+    }
+
+    @Test
+    void revokedRoleDisappearsFromDatabase() {
+        User user = User.selfRegistered(new EmailAddress("admin@college.ru"), "Анна Петрова");
+        user.grantRole(Role.ADMIN);
+        User saved = userRepository.save(user);
+        entityManager.flush();
+        entityManager.clear();
+
+        User loaded = userRepository.findById(saved.getId()).orElseThrow();
+        loaded.revokeRole(Role.ADMIN);
+        userRepository.save(loaded);
+        entityManager.flush();
+        entityManager.clear();
+
+        assertThat(userRepository.findById(saved.getId()).orElseThrow().getRoles()).isEmpty();
+    }
+
+    /** Роли читаются сразу с пользователем, поэтому их видно и за пределами транзакции репозитория. */
+    @Test
+    void rolesAreLoadedEagerly() {
+        User user = User.selfRegistered(new EmailAddress("eager@college.ru"), "Иван Иванов");
+        user.grantRole(Role.STUDENT);
+        UUID id = userRepository.save(user).getId();
+        entityManager.flush();
+        entityManager.clear();
+
+        User detached = userRepository.findById(id).orElseThrow();
+        entityManager.clear();
+
+        assertThat(detached.getRoles()).containsExactly(Role.STUDENT);
     }
 }
