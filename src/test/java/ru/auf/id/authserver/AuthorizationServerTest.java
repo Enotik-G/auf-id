@@ -113,6 +113,15 @@ class AuthorizationServerTest {
     }
 
     @Test
+    void discoveryAnnouncesTheAlgorithmTokensAreSignedWith() throws Exception {
+        // Токены подписаны ES256 (ключ EC P-256) — discovery должен говорить то же, а не RS256 по умолчанию.
+        mockMvc.perform(get("/.well-known/openid-configuration"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id_token_signing_alg_values_supported.length()").value(1))
+                .andExpect(jsonPath("$.id_token_signing_alg_values_supported[0]").value("ES256"));
+    }
+
+    @Test
     void publicKeysArePublished() throws Exception {
         mockMvc.perform(get("/oauth2/jwks"))
                 .andExpect(status().isOk())
