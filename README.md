@@ -1,4 +1,4 @@
-# Auth Service
+# AUF ID
 
 Единый сервис входа (SSO, OpenID Connect) для цифровой экосистемы колледжа: планировщик, meet, соцсеть,
 доска, заметки и другие сервисы входят **через него**, а не хранят пароли сами.
@@ -95,7 +95,7 @@ PASSWORD_PEPPER=$(openssl rand -base64 48)
 CAPTCHA_SECRET=$(openssl rand -base64 48)
 JWT_SIGNING_KEY=$(openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 | openssl pkcs8 -topk8 -nocrypt -outform DER | base64 -w0)
 AUTH_DEV_CLIENT_ENABLED=true
-DB_NAME=auth
+DB_NAME=aufid
 DB_USER=auth
 DB_PASSWORD=$(openssl rand -base64 24 | tr -d '/+=' | head -c 24)
 EOF
@@ -361,7 +361,7 @@ curl -s -H "Authorization: Bearer ACCESS_TOKEN" http://localhost:8080/userinfo
 
 ```bash
 ./mvnw -DskipTests package
-java -jar target/authCollage-0.0.1-SNAPSHOT.jar
+java -jar target/auf-id-0.0.1-SNAPSHOT.jar
 ```
 
 Нужен JDK/JRE 25. Миграции БД применяются автоматически при старте (Liquibase).
