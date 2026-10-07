@@ -30,6 +30,8 @@ public class SecurityConfiguration {
                         // Регистрация и подтверждение почты — до входа, по определению.
                         .requestMatchers(HttpMethod.POST, "/api/v1/registrations", "/api/v1/email-verifications").permitAll()
                         .requestMatchers("/verify-email", "/verify-email/done").permitAll()
+                        // Активация выданной админом учётки: человек ещё не может войти — пароля у него нет.
+                        .requestMatchers("/activate", "/activate/done").permitAll()
                         // Страница входа — со всеми вариантами адреса (?error, ?unconfirmed, ?logout):
                         // permitAll() у formLogin открывает только адрес /login без параметров.
                         .requestMatchers("/login").permitAll()
