@@ -2,9 +2,12 @@ services:
   postgres:
     image: postgres:18-alpine
     environment:
-      POSTGRES_DB: auth
-      POSTGRES_USER: auth
-      POSTGRES_PASSWORD: auf67
+      # Значения берутся из .env (docker compose читает его сам).
+      # Без них compose не стартует — это лучше, чем тихо поднять базу с паролем,
+      # который лежит в публичном репозитории.
+      POSTGRES_DB: ${DB_NAME:?DB_NAME не задан в .env}
+      POSTGRES_USER: ${DB_USER:?DB_USER не задан в .env}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD не задан в .env}
     ports:
       - "5432:5432"
     volumes:
