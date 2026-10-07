@@ -121,6 +121,36 @@ public class User {
         status = UserStatus.ACTIVE;
     }
 
+    /**
+     * Заблокировать доступ. Возможно из любого состояния, кроме удалённого.
+     *
+     * <p>Уже выданные access-токены продолжат работать до истечения (до 10 минут) — их отзыв
+     * относится к серверу авторизации и делается отдельно (задача 3.5).
+     */
+    public void block() {
+        if (status == UserStatus.DELETED) {
+            throw new IllegalStateException("Удалённую учётку блокировать нечего");
+        }
+        status = UserStatus.BLOCKED;
+    }
+
+    /**
+     * Снять блокировку.
+     *
+     * <p>Куда вернуть — решает вызывающий, потому что сущность не знает, задан ли пароль: учётку,
+     * заблокированную до активации, нужно вернуть в {@code INVITED}, иначе она окажется «активной» без
+     * пароля и войти в неё всё равно будет нельзя, но выглядеть это будет как исправный аккаунт.
+     */
+    public void unblock(UserStatus restoreTo) {
+        if (status != UserStatus.BLOCKED) {
+            throw new IllegalStateException("Снять блокировку можно только с BLOCKED, сейчас " + status);
+        }
+        if (restoreTo != UserStatus.ACTIVE && restoreTo != UserStatus.INVITED) {
+            throw new IllegalArgumentException("Вернуть можно только в ACTIVE или INVITED, запрошено " + restoreTo);
+        }
+        status = restoreTo;
+    }
+
     /** Отметить успешный вход. */
     public void recordLogin(Instant at) {
         lastLoginAt = at;
