@@ -222,7 +222,7 @@ flowchart LR
 | `totp_credentials` | user\_id, secret (зашифр.), confirmed\_at | 1 |
 | `recovery_codes` | user\_id, code\_hash, used\_at | 1 |
 | `webauthn_credentials` | user\_id, credential\_id, public\_key, sign\_count, transports, name, last\_used\_at | 2 |
-| `user_role` | user\_id, role (`ADMIN / CURATOR / STUDENT`), granted\_at — **(изменено)** вместо трёх таблиц одна: роли грубые, их три, справочник и права-строки избыточны | 1 |
+| `user_roles` | user\_id, role (`ADMIN / CURATOR / STUDENT`), granted\_at — **(изменено)** вместо трёх таблиц одна: роли грубые, их три, справочник и права-строки избыточны | 1 |
 | `permissions`, `role_permissions` | детальные права | 3 (ReBAC) |
 | `oauth2_registered_client` | сервисы-клиенты: redirect\_uri, scopes, auth method (схема Spring AS) | 1 |
 | `oauth2_authorization` | выданные токены и семьи refresh (схема Spring AS) | 1 |
