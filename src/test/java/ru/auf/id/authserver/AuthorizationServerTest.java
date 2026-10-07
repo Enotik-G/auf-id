@@ -179,6 +179,28 @@ class AuthorizationServerTest {
         assertThat(stored).isEqualTo(1);
     }
 
+    /**
+     * Утечка дампа БД не должна выдавать живые коды и токены (и ФИО с почтой из id_token):
+     * в таблице лежат только их хеши SHA-256.
+     */
+    @Test
+    void codeAndTokensAreStoredOnlyAsHashes() throws Exception {
+        String code = authorize();
+        String tokens = exchangeCodeForTokens(code);
+        String accessToken = JsonPath.read(tokens, "$.access_token");
+        String idToken = JsonPath.read(tokens, "$.id_token");
+
+        var row = jdbc.queryForMap(
+                "SELECT authorization_code_value, access_token_value, oidc_id_token_value"
+                        + " FROM oauth2_authorization WHERE principal_name = ?",
+                user.getId().toString());
+
+        assertThat(row.get("authorization_code_value")).isEqualTo(HashedTokenAuthorizationService.hash(code));
+        assertThat(row.get("access_token_value")).isEqualTo(HashedTokenAuthorizationService.hash(accessToken));
+        assertThat(row.get("oidc_id_token_value")).isEqualTo(HashedTokenAuthorizationService.hash(idToken));
+        assertThat(row.values()).allSatisfy(value -> assertThat((String) value).startsWith("sha256:"));
+    }
+
     @Test
     void userinfoReturnsSubjectForIssuedToken() throws Exception {
         String accessToken = JsonPath.read(exchangeCodeForTokens(authorize()), "$.access_token");
