@@ -13,7 +13,15 @@ import java.time.Duration;
 public enum RateLimit {
 
     /** Попытки входа: 20 в минуту. */
-    LOGIN("login", 20, Duration.ofMinutes(1));
+    LOGIN("login", 20, Duration.ofMinutes(1)),
+
+    /**
+     * Обмен кода на токен ({@code POST /oauth2/token}): 600 в минуту (решение от 2026-10-07).
+     * Ручка публичная, а каждый запрос — поход в БД и подпись ES256, поэтому без лимита её можно
+     * дёргать в цикле и грузить сервер. Число большое с запасом: за общим NAT колледжа
+     * в пик бывают сотни входов в минуту с одного адреса.
+     */
+    TOKEN("token", 600, Duration.ofMinutes(1));
 
     private final String keyPrefix;
     private final int capacity;
