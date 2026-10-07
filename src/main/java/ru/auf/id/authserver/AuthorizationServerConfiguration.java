@@ -11,6 +11,8 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.oauth2.jose.jws.SignatureAlgorithm;
+import org.springframework.security.oauth2.server.authorization.oidc.OidcProviderConfiguration;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
 import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
@@ -45,7 +47,9 @@ public class AuthorizationServerConfiguration {
                             authorizationServer.getEndpointsMatcher(),
                             preflightToAuthorizationServer()));
                     // OpenID Connect: id_token, /userinfo, /.well-known/openid-configuration.
-                    authorizationServer.oidc(Customizer.withDefaults());
+                    authorizationServer.oidc(oidc -> oidc.providerConfigurationEndpoint(endpoint ->
+                            endpoint.providerConfigurationCustomizer(
+                                    AuthorizationServerConfiguration::announceEs256)));
                 })
                 // Браузерные клиенты (SPA) с других адресов обменивают код на токен через fetch —
                 // без CORS-заголовков браузер не отдаст им ответ.
@@ -59,6 +63,20 @@ public class AuthorizationServerConfiguration {
                         new LoginUrlAuthenticationEntryPoint("/login"),
                         new MediaTypeRequestMatcher(MediaType.TEXT_HTML)));
         return http.build();
+    }
+
+    /**
+     * Сообщает клиентам в {@code /.well-known/openid-configuration}, что id_token подписан ES256.
+     *
+     * <p>Spring по умолчанию пишет туда RS256, а мы подписываем все токены ключом EC
+     * ({@link JwtConfiguration}). Строгий клиент сверяет алгоритм токена с этим списком
+     * и отверг бы наш id_token.
+     */
+    private static void announceEs256(OidcProviderConfiguration.Builder configuration) {
+        configuration.idTokenSigningAlgorithms(algorithms -> {
+            algorithms.clear();
+            algorithms.add(SignatureAlgorithm.ES256.getName());
+        });
     }
 
     /** Предварительный запрос (OPTIONS) к адресам сервера авторизации, которые читают из JavaScript. */
