@@ -15,6 +15,8 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.hamcrest.Matchers.not;
 
 /** Лимиты по IP на настоящих запросах ко всему приложению. MockMvc отправляет запросы с адреса 127.0.0.1. */
 @SpringBootTest
@@ -64,5 +66,33 @@ class RateLimitFilterTest {
                             return request;
                         }))
                 .andExpect(redirectedUrl("/login?error"));
+    }
+
+    /** Ручку токена вызывают программы: вместо редиректа — 429 и Retry-After. Запросы без клиента, но в ведро считаются. */
+    @Test
+    void sixHundredFirstTokenRequestInAMinuteGets429() throws Exception {
+        for (int i = 0; i < 600; i++) {
+            mockMvc.perform(post("/oauth2/token").param("grant_type", "authorization_code"))
+                    .andExpect(status().is(not(429)));
+        }
+
+        mockMvc.perform(post("/oauth2/token").param("grant_type", "authorization_code"))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(header().exists("Retry-After"));
+    }
+
+    @Test
+    void tokenLimitOfOneIpDoesNotAffectAnotherIp() throws Exception {
+        for (int i = 0; i < 601; i++) {
+            mockMvc.perform(post("/oauth2/token").param("grant_type", "authorization_code"));
+        }
+
+        mockMvc.perform(post("/oauth2/token")
+                        .param("grant_type", "authorization_code")
+                        .with(request -> {
+                            request.setRemoteAddr("198.51.100.2");
+                            return request;
+                        }))
+                .andExpect(status().is(not(429)));
     }
 }
