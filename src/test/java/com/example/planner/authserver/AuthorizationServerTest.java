@@ -177,7 +177,10 @@ class AuthorizationServerTest {
 
         mockMvc.perform(get("/userinfo").header("Authorization", "Bearer " + accessToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.sub").value(user.getId().toString()));
+                .andExpect(jsonPath("$.sub").value(user.getId().toString()))
+                .andExpect(jsonPath("$.name").value("Иван Петров"))
+                .andExpect(jsonPath("$.email").value(EMAIL))
+                .andExpect(jsonPath("$.email_verified").value(true));
     }
 
     @Test
@@ -217,6 +220,34 @@ class AuthorizationServerTest {
         assertThat(result.getResponse().getRedirectedUrl()).contains("error=invalid_request");
     }
 
+    @Test
+    void tokensCarryNameAndEmailOfTheUser() throws Exception {
+        String tokens = exchangeCodeForTokens(authorize());
+
+        assertUserClaims(jwtDecoder.decode(JsonPath.read(tokens, "$.access_token")));
+        assertUserClaims(jwtDecoder.decode(JsonPath.read(tokens, "$.id_token")));
+    }
+
+    @Test
+    void clientThatDidNotAskForScopesGetsNoPersonalClaims() throws Exception {
+        var params = authorizeParams();
+        params.set("scope", "openid");
+
+        Jwt accessToken = jwtDecoder.decode(JsonPath.read(exchangeCodeForTokens(authorize(params)), "$.access_token"));
+
+        assertThat(accessToken.getSubject()).isEqualTo(user.getId().toString());
+        assertThat(accessToken.hasClaim("name")).isFalse();
+        assertThat(accessToken.hasClaim("email")).isFalse();
+        assertThat(accessToken.hasClaim("email_verified")).isFalse();
+    }
+
+    /** Поля name, email, email_verified — стандартные для OpenID Connect, их понимает любой клиент. */
+    private void assertUserClaims(Jwt token) {
+        assertThat(token.getClaimAsString("name")).isEqualTo("Иван Петров");
+        assertThat(token.getClaimAsString("email")).isEqualTo(EMAIL);
+        assertThat(token.getClaimAsBoolean("email_verified")).isTrue();
+    }
+
     /** Шаг 2: планировщик меняет код на токены. Возвращает JSON-ответ сервера. */
     private String exchangeCodeForTokens(String code) throws Exception {
         return mockMvc.perform(post("/oauth2/token")
@@ -239,7 +270,11 @@ class AuthorizationServerTest {
 
     /** Шаг 1: вошедший пользователь идёт на /oauth2/authorize и возвращается в планировщик с одноразовым кодом. */
     private String authorize() throws Exception {
-        MvcResult result = mockMvc.perform(get("/oauth2/authorize").queryParams(authorizeParams()).session(logIn()))
+        return authorize(authorizeParams());
+    }
+
+    private String authorize(org.springframework.util.LinkedMultiValueMap<String, String> params) throws Exception {
+        MvcResult result = mockMvc.perform(get("/oauth2/authorize").queryParams(params).session(logIn()))
                 .andExpect(status().is3xxRedirection())
                 .andReturn();
 
@@ -253,7 +288,7 @@ class AuthorizationServerTest {
         var params = new org.springframework.util.LinkedMultiValueMap<String, String>();
         params.add("response_type", "code");
         params.add("client_id", CLIENT_ID);
-        params.add("scope", "openid profile");
+        params.add("scope", "openid profile email");
         params.add("redirect_uri", REDIRECT_URI);
         params.add("state", "xyz");
         params.add("code_challenge", codeChallenge(codeVerifier));

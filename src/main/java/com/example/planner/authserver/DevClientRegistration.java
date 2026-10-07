@@ -48,7 +48,9 @@ public class DevClientRegistration implements ApplicationRunner {
                 .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
                 .redirectUri(REDIRECT_URI)
                 .scope(OidcScopes.OPENID)
+                // profile -> claim name, email -> claims email и email_verified (OpenID Connect Core, 5.4)
                 .scope(OidcScopes.PROFILE)
+                .scope(OidcScopes.EMAIL)
                 .clientSettings(ClientSettings.builder()
                         .requireProofKey(true)
                         // Свой сервис: не спрашиваем «разрешить доступ?».
