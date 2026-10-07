@@ -10,12 +10,14 @@ import com.example.planner.user.PasswordHasher;
 import com.example.planner.user.Role;
 import com.example.planner.user.User;
 import com.example.planner.user.UserRepository;
+import com.example.planner.user.UserNotFoundException;
 import com.example.planner.user.UserStatus;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Set;
+import java.util.UUID;
 
 /**
  * Выдача учётных записей администратором — единственный путь, которым в системе появляется аккаунт.
@@ -53,6 +55,28 @@ public class ProvisioningService {
 
         // Токен виден целиком только в этот момент: в базе остаётся лишь его SHA-256.
         return new Invitation(user.getId(), tokenService.issue(user, TokenPurpose.INVITE));
+    }
+
+    /**
+     * Выдаёт новую ссылку активации вместо прежних: человек потерял ссылку или она истекла.
+     *
+     * <p>Прежние ссылки при этом обесцениваются. Иначе выдача новой не закрывала бы утёкшую старую —
+     * а просить администратора «выдайте ещё одну» как раз и будут в том числе потому, что первая
+     * ушла не туда.
+     *
+     * @throws UserNotFoundException если учётки нет
+     * @throws IllegalStateException если учётка уже не ждёт активации
+     */
+    @Transactional
+    public Invitation reissueInvitation(UUID userId) {
+        User user = userRepository.findById(userId).orElseThrow(() -> new UserNotFoundException(userId));
+        if (user.getStatus() != UserStatus.INVITED) {
+            throw new IllegalStateException(
+                    "Ссылку активации можно выдать только учётке в статусе INVITED, сейчас " + user.getStatus());
+        }
+
+        tokenService.revokeAll(user, TokenPurpose.INVITE);
+        return new Invitation(userId, tokenService.issue(user, TokenPurpose.INVITE));
     }
 
     /**
