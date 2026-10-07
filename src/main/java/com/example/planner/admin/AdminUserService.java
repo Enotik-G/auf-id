@@ -67,6 +67,11 @@ public class AdminUserService {
         user.unblock(restoreTo);
     }
 
+    @Transactional(readOnly = true)
+    public User get(UUID userId) {
+        return find(userId);
+    }
+
     @Transactional
     public void grantRole(UUID userId, Role role) {
         find(userId).grantRole(role);

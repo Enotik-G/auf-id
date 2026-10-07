@@ -40,6 +40,12 @@ public class AccountUserDetailsService implements UserDetailsService {
         return org.springframework.security.core.userdetails.User
                 .withUsername(user.getId().toString())
                 .password(credential.getPasswordHash())
+                // Роли нужны Spring Security в виде полномочий с приставкой ROLE_: именно её ждёт
+                // hasRole("ADMIN"). Без этого правила доступа к админке не сработали бы вовсе —
+                // вошедший администратор выглядел бы как пользователь без единого полномочия.
+                .authorities(user.getRoles().stream()
+                        .map(role -> "ROLE_" + role.name())
+                        .toArray(String[]::new))
                 .disabled(user.getStatus() != UserStatus.ACTIVE && user.getStatus() != UserStatus.LOCKED)
                 // Статус LOCKED в БД — на будущее, ставит администратор. От подбора пароля защищает
                 // не блокировка, а капча (LoginAttemptService) — чужой аккаунт так не заблокировать.
