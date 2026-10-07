@@ -34,34 +34,34 @@ class OneTimeTokenServiceTest {
 
     @BeforeEach
     void createUser() {
-        user = userRepository.save(User.selfRegistered(new EmailAddress("ivan@mail.ru"), "Иван Петров"));
+        user = userRepository.save(User.invited(new EmailAddress("ivan@mail.ru"), "Иван Петров"));
     }
 
     @Test
     void issuedTokenIsUrlSafeAndStoredOnlyAsHash() {
-        String rawToken = serviceAt(ISSUED_AT).issue(user, TokenPurpose.EMAIL_VERIFY);
+        String rawToken = serviceAt(ISSUED_AT).issue(user, TokenPurpose.INVITE);
 
         assertThat(rawToken).hasSize(43).matches("[A-Za-z0-9_-]+");
 
         OneTimeToken stored = tokenRepository.findAll().getFirst();
         assertThat(stored.getTokenHash()).hasSize(64).isNotEqualTo(rawToken);
-        assertThat(stored.getExpiresAt()).isEqualTo(ISSUED_AT.plus(Duration.ofHours(24)));
+        assertThat(stored.getExpiresAt()).isEqualTo(ISSUED_AT.plus(Duration.ofDays(7)));
     }
 
     @Test
     void twoIssuedTokensAreDifferent() {
         OneTimeTokenService service = serviceAt(ISSUED_AT);
 
-        assertThat(service.issue(user, TokenPurpose.EMAIL_VERIFY))
-                .isNotEqualTo(service.issue(user, TokenPurpose.EMAIL_VERIFY));
+        assertThat(service.issue(user, TokenPurpose.INVITE))
+                .isNotEqualTo(service.issue(user, TokenPurpose.INVITE));
     }
 
     @Test
     void consumeReturnsOwnerAndMarksTokenUsed() {
-        String rawToken = serviceAt(ISSUED_AT).issue(user, TokenPurpose.EMAIL_VERIFY);
+        String rawToken = serviceAt(ISSUED_AT).issue(user, TokenPurpose.INVITE);
         Instant clickedAt = ISSUED_AT.plus(Duration.ofHours(1));
 
-        User owner = serviceAt(clickedAt).consume(rawToken, TokenPurpose.EMAIL_VERIFY);
+        User owner = serviceAt(clickedAt).consume(rawToken, TokenPurpose.INVITE);
 
         assertThat(owner.getId()).isEqualTo(user.getId());
         assertThat(tokenRepository.findAll().getFirst().getUsedAt()).isEqualTo(clickedAt);
@@ -69,26 +69,26 @@ class OneTimeTokenServiceTest {
 
     @Test
     void tokenCannotBeUsedTwice() {
-        String rawToken = serviceAt(ISSUED_AT).issue(user, TokenPurpose.EMAIL_VERIFY);
+        String rawToken = serviceAt(ISSUED_AT).issue(user, TokenPurpose.INVITE);
         OneTimeTokenService later = serviceAt(ISSUED_AT.plus(Duration.ofHours(1)));
-        later.consume(rawToken, TokenPurpose.EMAIL_VERIFY);
+        later.consume(rawToken, TokenPurpose.INVITE);
 
-        assertThatThrownBy(() -> later.consume(rawToken, TokenPurpose.EMAIL_VERIFY))
+        assertThatThrownBy(() -> later.consume(rawToken, TokenPurpose.INVITE))
                 .isInstanceOf(InvalidOneTimeTokenException.class);
     }
 
     @Test
     void expiredTokenIsRejected() {
-        String rawToken = serviceAt(ISSUED_AT).issue(user, TokenPurpose.EMAIL_VERIFY);
-        OneTimeTokenService dayAndMinuteLater = serviceAt(ISSUED_AT.plus(Duration.ofHours(24)).plusSeconds(60));
+        String rawToken = serviceAt(ISSUED_AT).issue(user, TokenPurpose.INVITE);
+        OneTimeTokenService afterExpiry = serviceAt(ISSUED_AT.plus(Duration.ofDays(7)).plusSeconds(60));
 
-        assertThatThrownBy(() -> dayAndMinuteLater.consume(rawToken, TokenPurpose.EMAIL_VERIFY))
+        assertThatThrownBy(() -> afterExpiry.consume(rawToken, TokenPurpose.INVITE))
                 .isInstanceOf(InvalidOneTimeTokenException.class);
     }
 
     @Test
     void tokenOfAnotherPurposeIsRejected() {
-        String rawToken = serviceAt(ISSUED_AT).issue(user, TokenPurpose.EMAIL_VERIFY);
+        String rawToken = serviceAt(ISSUED_AT).issue(user, TokenPurpose.INVITE);
 
         assertThatThrownBy(() -> serviceAt(ISSUED_AT).consume(rawToken, TokenPurpose.PASSWORD_RESET))
                 .isInstanceOf(InvalidOneTimeTokenException.class);
@@ -96,7 +96,7 @@ class OneTimeTokenServiceTest {
 
     @Test
     void unknownTokenIsRejected() {
-        assertThatThrownBy(() -> serviceAt(ISSUED_AT).consume("made-up-token", TokenPurpose.EMAIL_VERIFY))
+        assertThatThrownBy(() -> serviceAt(ISSUED_AT).consume("made-up-token", TokenPurpose.INVITE))
                 .isInstanceOf(InvalidOneTimeTokenException.class);
     }
 
@@ -129,7 +129,7 @@ class OneTimeTokenServiceTest {
 
     @Test
     void revokeAllTouchesOnlyTheGivenUser() {
-        User another = userRepository.save(User.selfRegistered(new EmailAddress("oleg@mail.ru"), "Олег Сидоров"));
+        User another = userRepository.save(User.invited(new EmailAddress("oleg@mail.ru"), "Олег Сидоров"));
         OneTimeTokenService service = serviceAt(ISSUED_AT);
         String othersToken = service.issue(another, TokenPurpose.INVITE);
         service.issue(user, TokenPurpose.INVITE);

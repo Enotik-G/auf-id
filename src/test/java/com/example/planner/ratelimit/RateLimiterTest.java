@@ -41,33 +41,13 @@ class RateLimiterTest {
         assertThat(twentyFirst.retryAfter()).isPositive().isLessThanOrEqualTo(Duration.ofMinutes(1));
     }
 
-    @Test
-    void allowsFiveRegistrationsPerHourThenRejects() {
-        for (int i = 0; i < 5; i++) {
-            assertThat(rateLimiter.tryAcquire(RateLimit.REGISTRATION, IP).isAllowed()).isTrue();
-        }
-
-        RateLimiter.Decision sixth = rateLimiter.tryAcquire(RateLimit.REGISTRATION, IP);
-
-        assertThat(sixth.isAllowed()).isFalse();
-        assertThat(sixth.retryAfter()).isGreaterThan(Duration.ofMinutes(59)).isLessThanOrEqualTo(Duration.ofHours(1));
-    }
-
+    /** Своё ведро на каждый адрес: исчерпавший лимит не мешает остальным. */
     @Test
     void eachIpHasItsOwnLimit() {
-        for (int i = 0; i < 5; i++) {
-            rateLimiter.tryAcquire(RateLimit.REGISTRATION, IP);
+        for (int i = 0; i < 20; i++) {
+            rateLimiter.tryAcquire(RateLimit.LOGIN, IP);
         }
 
-        assertThat(rateLimiter.tryAcquire(RateLimit.REGISTRATION, "198.51.100.1").isAllowed()).isTrue();
-    }
-
-    @Test
-    void loginAndRegistrationLimitsAreSeparate() {
-        for (int i = 0; i < 5; i++) {
-            rateLimiter.tryAcquire(RateLimit.REGISTRATION, IP);
-        }
-
-        assertThat(rateLimiter.tryAcquire(RateLimit.LOGIN, IP).isAllowed()).isTrue();
+        assertThat(rateLimiter.tryAcquire(RateLimit.LOGIN, "198.51.100.1").isAllowed()).isTrue();
     }
 }

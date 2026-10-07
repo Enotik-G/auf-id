@@ -6,7 +6,6 @@ package com.example.planner.user;
  */
 public enum UserStatus {
     /** Зарегистрировался сам, ещё не подтвердил почту. */
-    PENDING_VERIFICATION,
     /** Приглашён администратором, ещё не установил пароль. */
     INVITED,
     /** Может входить. */

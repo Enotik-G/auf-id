@@ -9,7 +9,6 @@ import java.time.Duration;
  */
 public enum TokenPurpose {
     /** Подтверждение почты после саморегистрации. */
-    EMAIL_VERIFY(Duration.ofHours(24)),
     /** Сброс забытого пароля — короткий срок, это доступ к аккаунту. */
     PASSWORD_RESET(Duration.ofMinutes(30)),
     /** Приглашение от администратора. */

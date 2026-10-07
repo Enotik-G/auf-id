@@ -13,10 +13,7 @@ import java.time.Duration;
 public enum RateLimit {
 
     /** Попытки входа: 20 в минуту. */
-    LOGIN("login", 20, Duration.ofMinutes(1)),
-
-    /** Регистрации: 5 в час. */
-    REGISTRATION("registration", 5, Duration.ofHours(1));
+    LOGIN("login", 20, Duration.ofMinutes(1));
 
     private final String keyPrefix;
     private final int capacity;

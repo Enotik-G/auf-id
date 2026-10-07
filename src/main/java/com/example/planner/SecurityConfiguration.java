@@ -30,12 +30,9 @@ public class SecurityConfiguration {
     SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
                 .authorizeHttpRequests(requests -> requests
-                        // Регистрация и подтверждение почты — до входа, по определению.
-                        .requestMatchers(HttpMethod.POST, "/api/v1/registrations", "/api/v1/email-verifications").permitAll()
-                        .requestMatchers("/verify-email", "/verify-email/done").permitAll()
                         // Активация выданной админом учётки: человек ещё не может войти — пароля у него нет.
                         .requestMatchers("/activate", "/activate/done").permitAll()
-                        // Страница входа — со всеми вариантами адреса (?error, ?unconfirmed, ?logout):
+                        // Страница входа — со всеми вариантами адреса (?error, ?blocked, ?logout):
                         // permitAll() у formLogin открывает только адрес /login без параметров.
                         .requestMatchers("/login").permitAll()
                         // Стили и скрипты страниц (виджет капчи).
@@ -78,12 +75,15 @@ public class SecurityConfiguration {
     }
 
     /**
-     * Куда отправить после неудачного входа. «Почта не подтверждена» возможна только при верном пароле
-     * (см. LoginConfiguration), всё остальное — одно общее сообщение без подробностей.
+     * Куда отправить после неудачного входа.
+     *
+     * <p>«Доступ закрыт» возможно только при верном пароле (см. LoginConfiguration), поэтому подсказку
+     * видит владелец аккаунта, а не тот, кто перебирает адреса. Всё остальное — одно общее сообщение
+     * без подробностей.
      */
     private static void redirectToLoginWithReason(HttpServletRequest request, HttpServletResponse response,
                                                   AuthenticationException exception) throws IOException {
-        String reason = exception instanceof DisabledException ? "unconfirmed" : "error";
+        String reason = exception instanceof DisabledException ? "blocked" : "error";
         response.sendRedirect(request.getContextPath() + "/login?" + reason);
     }
 }

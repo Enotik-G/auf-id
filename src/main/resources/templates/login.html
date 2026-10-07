@@ -13,8 +13,8 @@
     <h1>Вход</h1>
 
     <div class="message error" th:if="${param.error}">Неверная почта или пароль.</div>
-    <div class="message error" th:if="${param.unconfirmed}">
-        Почта ещё не подтверждена. Перейдите по ссылке из письма, которое пришло после регистрации.
+    <div class="message error" th:if="${param.blocked}">
+        Доступ к аккаунту закрыт. Обратитесь к администратору.
     </div>
     <div class="message error" th:if="${param.tooManyAttempts}">
         Слишком много попыток входа с вашего адреса. Подождите минуту и попробуйте снова.

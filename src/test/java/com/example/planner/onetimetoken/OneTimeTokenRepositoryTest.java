@@ -33,26 +33,26 @@ class OneTimeTokenRepositoryTest {
     @Test
     void savesTokenAndFindsItByHashAndPurpose() {
         User user = saveUser();
-        tokenRepository.save(OneTimeToken.issue(user, TokenPurpose.EMAIL_VERIFY, HASH, Instant.now()));
+        tokenRepository.save(OneTimeToken.issue(user, TokenPurpose.INVITE, HASH, Instant.now()));
         entityManager.flush();
         entityManager.clear();
 
-        OneTimeToken loaded = tokenRepository.findByTokenHashAndPurpose(HASH, TokenPurpose.EMAIL_VERIFY).orElseThrow();
+        OneTimeToken loaded = tokenRepository.findByTokenHashAndPurpose(HASH, TokenPurpose.INVITE).orElseThrow();
 
         assertThat(loaded.getUser().getId()).isEqualTo(user.getId());
-        assertThat(Duration.between(loaded.getCreatedAt(), loaded.getExpiresAt())).isEqualTo(Duration.ofHours(24));
+        assertThat(Duration.between(loaded.getCreatedAt(), loaded.getExpiresAt())).isEqualTo(Duration.ofDays(7));
         assertThat(loaded.getUsedAt()).isNull();
     }
 
     @Test
     void tokenOfOnePurposeIsNotFoundForAnother() {
         User user = saveUser();
-        tokenRepository.saveAndFlush(OneTimeToken.issue(user, TokenPurpose.EMAIL_VERIFY, HASH, Instant.now()));
+        tokenRepository.saveAndFlush(OneTimeToken.issue(user, TokenPurpose.INVITE, HASH, Instant.now()));
 
         assertThat(tokenRepository.findByTokenHashAndPurpose(HASH, TokenPurpose.PASSWORD_RESET)).isEmpty();
     }
 
     private User saveUser() {
-        return userRepository.save(User.selfRegistered(new EmailAddress("ivan@mail.ru"), "Иван Петров"));
+        return userRepository.save(User.invited(new EmailAddress("ivan@mail.ru"), "Иван Петров"));
     }
 }

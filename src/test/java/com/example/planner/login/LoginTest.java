@@ -16,7 +16,6 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
@@ -63,9 +62,6 @@ class LoginTest {
 
     @Autowired
     private CaptchaService captchaService;
-
-    @MockitoBean
-    private JavaMailSender mailSender;
 
     @AfterEach
     void cleanUp() {
@@ -213,18 +209,22 @@ class LoginTest {
     }
 
     @Test
-    void unconfirmedEmailWithCorrectPasswordGetsHint() throws Exception {
-        saveUser("ivan@mail.ru", false);
+    void blockedAccountWithCorrectPasswordGetsHint() throws Exception {
+        User user = saveUser("ivan@mail.ru", true);
+        user.block();
+        userRepository.save(user);
 
         mockMvc.perform(formLogin().user("ivan@mail.ru").password(PASSWORD))
                 .andExpect(unauthenticated())
-                .andExpect(redirectedUrl("/login?unconfirmed"));
+                .andExpect(redirectedUrl("/login?blocked"));
     }
 
     /** Главная проверка безопасности этой задачи: без пароля статус чужой почты не узнать. */
     @Test
-    void unconfirmedEmailWithWrongPasswordLooksLikeAnyOtherError() throws Exception {
-        saveUser("ivan@mail.ru", false);
+    void blockedAccountWithWrongPasswordLooksLikeAnyOtherError() throws Exception {
+        User user = saveUser("ivan@mail.ru", true);
+        user.block();
+        userRepository.save(user);
 
         mockMvc.perform(formLogin().user("ivan@mail.ru").password("wrong password"))
                 .andExpect(unauthenticated())
@@ -262,9 +262,9 @@ class LoginTest {
     }
 
     private User saveUser(String email, boolean confirmed) {
-        User user = User.selfRegistered(new EmailAddress(email), "Иван Петров");
+        User user = User.invited(new EmailAddress(email), "Иван Петров");
         if (confirmed) {
-            user.verifyEmail();
+            user.activate();
         }
         userRepository.save(user);
         credentialRepository.save(PasswordCredential.forUser(user, passwordHasher.hash(PASSWORD)));

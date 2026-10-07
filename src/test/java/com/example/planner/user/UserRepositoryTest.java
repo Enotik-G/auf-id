@@ -25,7 +25,7 @@ class UserRepositoryTest {
 
     @Test
     void savesAndLoadsSelfRegisteredUser() {
-        User saved = userRepository.save(User.selfRegistered(new EmailAddress("ivan@mail.ru"), "Иван Петров"));
+        User saved = userRepository.save(User.invited(new EmailAddress("ivan@mail.ru"), "Иван Петров"));
         entityManager.flush();
         entityManager.clear();
 
@@ -33,7 +33,7 @@ class UserRepositoryTest {
 
         assertThat(loaded.getEmail()).isEqualTo(new EmailAddress("ivan@mail.ru"));
         assertThat(loaded.getFullName()).isEqualTo("Иван Петров");
-        assertThat(loaded.getStatus()).isEqualTo(UserStatus.PENDING_VERIFICATION);
+        assertThat(loaded.getStatus()).isEqualTo(UserStatus.INVITED);
         assertThat(loaded.isEmailVerified()).isFalse();
         assertThat(loaded.getCreatedAt()).isNotNull();
         assertThat(loaded.getLastLoginAt()).isNull();
@@ -41,7 +41,7 @@ class UserRepositoryTest {
 
     @Test
     void findsUserByEmailTypedDifferently() {
-        userRepository.save(User.selfRegistered(new EmailAddress("ivan@mail.ru"), "Иван Петров"));
+        userRepository.save(User.invited(new EmailAddress("ivan@mail.ru"), "Иван Петров"));
         entityManager.flush();
         entityManager.clear();
 
@@ -52,9 +52,9 @@ class UserRepositoryTest {
 
     @Test
     void rejectsSecondUserWithSameEmail() {
-        userRepository.saveAndFlush(User.selfRegistered(new EmailAddress("ivan@mail.ru"), "Иван Петров"));
+        userRepository.saveAndFlush(User.invited(new EmailAddress("ivan@mail.ru"), "Иван Петров"));
 
-        User duplicate = User.selfRegistered(new EmailAddress("IVAN@mail.ru"), "Другой Иван");
+        User duplicate = User.invited(new EmailAddress("IVAN@mail.ru"), "Другой Иван");
 
         assertThatThrownBy(() -> userRepository.saveAndFlush(duplicate))
                 .isInstanceOf(DataIntegrityViolationException.class);
@@ -62,7 +62,7 @@ class UserRepositoryTest {
 
     @Test
     void rolesSurviveSaveAndLoad() {
-        User user = User.selfRegistered(new EmailAddress("curator@college.ru"), "Олег Сидоров");
+        User user = User.invited(new EmailAddress("curator@college.ru"), "Олег Сидоров");
         user.grantRole(Role.CURATOR);
         user.grantRole(Role.STUDENT);
         User saved = userRepository.save(user);
@@ -76,7 +76,7 @@ class UserRepositoryTest {
 
     @Test
     void revokedRoleDisappearsFromDatabase() {
-        User user = User.selfRegistered(new EmailAddress("admin@college.ru"), "Анна Петрова");
+        User user = User.invited(new EmailAddress("admin@college.ru"), "Анна Петрова");
         user.grantRole(Role.ADMIN);
         User saved = userRepository.save(user);
         entityManager.flush();
@@ -94,7 +94,7 @@ class UserRepositoryTest {
     /** Роли читаются сразу с пользователем, поэтому их видно и за пределами транзакции репозитория. */
     @Test
     void rolesAreLoadedEagerly() {
-        User user = User.selfRegistered(new EmailAddress("eager@college.ru"), "Иван Иванов");
+        User user = User.invited(new EmailAddress("eager@college.ru"), "Иван Иванов");
         user.grantRole(Role.STUDENT);
         UUID id = userRepository.save(user).getId();
         entityManager.flush();

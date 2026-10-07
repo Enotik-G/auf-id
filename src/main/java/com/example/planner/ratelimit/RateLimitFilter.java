@@ -5,30 +5,26 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
-import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 
 /**
- * Отсекает слишком частые попытки входа и регистрации с одного IP — ещё до Spring Security,
- * то есть до проверки пароля: лишние попытки даже не тратят Argon2.
+ * Отсекает слишком частые попытки входа с одного IP — ещё до Spring Security, то есть до проверки
+ * пароля: лишние попытки даже не тратят Argon2.
+ *
+ * <p>Активацию по ссылке не ограничиваем: там один индексированный поиск по хешу токена, сам токен
+ * 256-битный и перебору не поддаётся, а пароль хешируется уже после проверки токена. Зато лимит по IP
+ * отрезал бы группу студентов, активирующихся из одного класса за общим NAT.
  */
 @RequiredArgsConstructor
 public class RateLimitFilter extends OncePerRequestFilter {
 
     static final String LOGIN_PATH = "/login";
-    static final String REGISTRATION_PATH = "/api/v1/registrations";
-
-    private static final String REGISTRATION_LIMIT_PROBLEM = """
-            {"type":"about:blank","title":"Too Many Requests","status":429,\
-            "detail":"Слишком много регистраций с вашего адреса. Попробуйте позже."}""";
 
     private final RateLimiter rateLimiter;
 
@@ -50,16 +46,8 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
         long retryAfterSeconds = Math.max(1, decision.retryAfter().toSeconds());
         response.setHeader("Retry-After", String.valueOf(retryAfterSeconds));
-        if (limit == RateLimit.LOGIN) {
-            // Страница входа — для людей: возвращаем на неё с понятным сообщением.
-            response.sendRedirect(request.getContextPath() + LOGIN_PATH + "?tooManyAttempts");
-        } else {
-            // Регистрация — JSON-API: стандартный ответ 429 в формате problem+json.
-            response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
-            response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
-            response.setCharacterEncoding(StandardCharsets.UTF_8.name());
-            response.getWriter().write(REGISTRATION_LIMIT_PROBLEM);
-        }
+        // Страница входа — для людей: возвращаем на неё с понятным сообщением.
+        response.sendRedirect(request.getContextPath() + LOGIN_PATH + "?tooManyAttempts");
     }
 
     /**
@@ -89,10 +77,6 @@ public class RateLimitFilter extends OncePerRequestFilter {
         }
         // Путь без префикса приложения. Не getServletPath(): в тестах (MockMvc) он пустой.
         String path = request.getRequestURI().substring(request.getContextPath().length());
-        return switch (path) {
-            case LOGIN_PATH -> RateLimit.LOGIN;
-            case REGISTRATION_PATH -> RateLimit.REGISTRATION;
-            default -> null;
-        };
+        return LOGIN_PATH.equals(path) ? RateLimit.LOGIN : null;
     }
 }
