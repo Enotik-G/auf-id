@@ -149,4 +149,42 @@ class UserTest {
 
         assertThat(invited.isEmailVerified()).isFalse();
     }
+
+    @Test
+    void blockClosesAccessFromAnyLivingStatus() {
+        User invited = User.invited(new EmailAddress("student@college.ru"), "Иван Иванов");
+        invited.block();
+        assertThat(invited.getStatus()).isEqualTo(UserStatus.BLOCKED);
+
+        user.verifyEmail();
+        user.block();
+        assertThat(user.getStatus()).isEqualTo(UserStatus.BLOCKED);
+    }
+
+    @Test
+    void unblockReturnsAccountToTheRequestedStatus() {
+        user.verifyEmail();
+        user.block();
+
+        user.unblock(UserStatus.ACTIVE);
+
+        assertThat(user.getStatus()).isEqualTo(UserStatus.ACTIVE);
+    }
+
+    @Test
+    void cannotUnblockAccountThatIsNotBlocked() {
+        user.verifyEmail();
+
+        assertThatThrownBy(() -> user.unblock(UserStatus.ACTIVE)).isInstanceOf(IllegalStateException.class);
+    }
+
+    /** Разблокировка возвращает только в рабочие состояния — не в LOCKED и не в DELETED. */
+    @Test
+    void cannotUnblockIntoAnArbitraryStatus() {
+        user.verifyEmail();
+        user.block();
+
+        assertThatThrownBy(() -> user.unblock(UserStatus.LOCKED)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> user.unblock(UserStatus.DELETED)).isInstanceOf(IllegalArgumentException.class);
+    }
 }
