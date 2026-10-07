@@ -66,17 +66,6 @@ public class User {
     @Enumerated(EnumType.STRING)
     private Set<Role> roles = new LinkedHashSet<>();
 
-    /** Новый пользователь, зарегистрировавшийся сам: почта ещё не подтверждена. */
-    public static User selfRegistered(EmailAddress email, String fullName) {
-        User user = new User();
-        user.email = email;
-        user.fullName = fullName;
-        user.emailVerified = false;
-        user.status = UserStatus.PENDING_VERIFICATION;
-        user.createdAt = Instant.now();
-        return user;
-    }
-
     /**
      * Учётка, созданная администратором: пароля ещё нет, владелец задаст его по ссылке активации.
      *
@@ -93,19 +82,6 @@ public class User {
         user.status = UserStatus.INVITED;
         user.createdAt = Instant.now();
         return user;
-    }
-
-    public boolean isAwaitingEmailVerification() {
-        return status == UserStatus.PENDING_VERIFICATION;
-    }
-
-    /** Владелец подтвердил почту — аккаунт становится активным. */
-    public void verifyEmail() {
-        if (!isAwaitingEmailVerification()) {
-            throw new IllegalStateException("Подтвердить почту можно только в статусе PENDING_VERIFICATION, сейчас " + status);
-        }
-        emailVerified = true;
-        status = UserStatus.ACTIVE;
     }
 
     /**

@@ -171,8 +171,8 @@ class AdminUserServiceTest {
     }
 
     private User activeUser(String email) {
-        User user = User.selfRegistered(new EmailAddress(email), "Кто-то");
-        user.verifyEmail();
+        User user = User.invited(new EmailAddress(email), "Кто-то");
+        user.activate();
         User saved = userRepository.save(user);
         credentialRepository.save(PasswordCredential.forUser(saved, passwordHasher.hash("correct horse battery staple")));
         return saved;

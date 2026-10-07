@@ -19,7 +19,6 @@ import org.springframework.context.annotation.Import;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
@@ -83,8 +82,8 @@ class AuthorizationServerTest {
 
     @BeforeEach
     void createActiveUser() {
-        user = User.selfRegistered(new EmailAddress(EMAIL), "Иван Петров");
-        user.verifyEmail();
+        user = User.invited(new EmailAddress(EMAIL), "Иван Петров");
+        user.activate();
         userRepository.save(user);
         credentialRepository.save(PasswordCredential.forUser(user, passwordHasher.hash(PASSWORD)));
     }
@@ -101,9 +100,6 @@ class AuthorizationServerTest {
         userRepository.deleteAll();
         redis.getRequiredConnectionFactory().getConnection().serverCommands().flushAll();
     }
-
-    @MockitoBean
-    private JavaMailSender mailSender;
 
     @Test
     void discoveryDocumentDescribesTheServer() throws Exception {
@@ -181,7 +177,8 @@ class AuthorizationServerTest {
                 .andExpect(jsonPath("$.sub").value(user.getId().toString()))
                 .andExpect(jsonPath("$.name").value("Иван Петров"))
                 .andExpect(jsonPath("$.email").value(EMAIL))
-                .andExpect(jsonPath("$.email_verified").value(true));
+                // Почту никто не подтверждал: админ назначил адрес, доступа к ящику у студента нет.
+                .andExpect(jsonPath("$.email_verified").value(false));
     }
 
     @Test
@@ -294,7 +291,7 @@ class AuthorizationServerTest {
     private void assertUserClaims(Jwt token) {
         assertThat(token.getClaimAsString("name")).isEqualTo("Иван Петров");
         assertThat(token.getClaimAsString("email")).isEqualTo(EMAIL);
-        assertThat(token.getClaimAsBoolean("email_verified")).isTrue();
+        assertThat(token.getClaimAsBoolean("email_verified")).isFalse();
     }
 
     /** Шаг 2: планировщик меняет код на токены. Возвращает JSON-ответ сервера. */

@@ -9,27 +9,46 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class UserTest {
 
-    private final User user = User.selfRegistered(new EmailAddress("ivan@mail.ru"), "Иван Петров");
+    private final User user = User.invited(new EmailAddress("ivan@mail.ru"), "Иван Петров");
 
     @Test
-    void selfRegisteredUserAwaitsVerification() {
-        assertThat(user.isAwaitingEmailVerification()).isTrue();
+    void invitedUserWaitsForActivation() {
+        assertThat(user.getStatus()).isEqualTo(UserStatus.INVITED);
+        assertThat(user.getRoles()).isEmpty();
+        assertThat(user.getLastLoginAt()).isNull();
+    }
+
+    /** Почту админ не подтверждал: он назначил адрес, а доступа к ящику у студента нет. */
+    @Test
+    void invitedUserHasUnverifiedEmail() {
         assertThat(user.isEmailVerified()).isFalse();
     }
 
+    // ─────────────────────────── активация ───────────────────────────
+
     @Test
-    void verifyingEmailActivatesAccount() {
-        user.verifyEmail();
+    void activationMakesInvitedUserActive() {
+        user.activate();
 
         assertThat(user.getStatus()).isEqualTo(UserStatus.ACTIVE);
-        assertThat(user.isEmailVerified()).isTrue();
-        assertThat(user.isAwaitingEmailVerification()).isFalse();
     }
 
     @Test
-    void newUserHasNeverLoggedIn() {
-        assertThat(user.getLastLoginAt()).isNull();
+    void cannotActivateTwice() {
+        user.activate();
+
+        assertThatThrownBy(user::activate).isInstanceOf(IllegalStateException.class);
     }
+
+    /** Переход по ссылке доказывает получение ссылки от администратора, а не владение ящиком. */
+    @Test
+    void activationDoesNotVerifyEmail() {
+        user.activate();
+
+        assertThat(user.isEmailVerified()).isFalse();
+    }
+
+    // ─────────────────────────── вход ───────────────────────────
 
     @Test
     void recordsLoginTime() {
@@ -40,18 +59,51 @@ class UserTest {
         assertThat(user.getLastLoginAt()).isEqualTo(loginAt);
     }
 
-    @Test
-    void cannotVerifyEmailTwice() {
-        user.verifyEmail();
+    // ─────────────────────────── блокировка ───────────────────────────
 
-        assertThatThrownBy(user::verifyEmail).isInstanceOf(IllegalStateException.class);
+    @Test
+    void blockClosesAccessFromAnyLivingStatus() {
+        user.block();
+        assertThat(user.getStatus()).isEqualTo(UserStatus.BLOCKED);
+
+        User active = User.invited(new EmailAddress("oleg@mail.ru"), "Олег Сидоров");
+        active.activate();
+        active.block();
+        assertThat(active.getStatus()).isEqualTo(UserStatus.BLOCKED);
     }
 
     @Test
-    void newUserHasNoRoles() {
-        assertThat(user.getRoles()).isEmpty();
-        assertThat(user.hasRole(Role.STUDENT)).isFalse();
+    void unblockReturnsAccountToTheRequestedStatus() {
+        user.activate();
+        user.block();
+
+        user.unblock(UserStatus.ACTIVE);
+
+        assertThat(user.getStatus()).isEqualTo(UserStatus.ACTIVE);
     }
+
+    @Test
+    void cannotUnblockAccountThatIsNotBlocked() {
+        assertThatThrownBy(() -> user.unblock(UserStatus.ACTIVE)).isInstanceOf(IllegalStateException.class);
+    }
+
+    /** Разблокировка возвращает только в рабочие состояния — не в LOCKED и не в DELETED. */
+    @Test
+    void cannotUnblockIntoAnArbitraryStatus() {
+        user.block();
+
+        assertThatThrownBy(() -> user.unblock(UserStatus.LOCKED)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> user.unblock(UserStatus.DELETED)).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void cannotActivateBlockedAccount() {
+        user.block();
+
+        assertThatThrownBy(user::activate).isInstanceOf(IllegalStateException.class);
+    }
+
+    // ─────────────────────────── роли ───────────────────────────
 
     @Test
     void grantsRole() {
@@ -74,7 +126,6 @@ class UserTest {
         user.grantRole(Role.ADMIN);
         user.revokeRole(Role.ADMIN);
 
-        assertThat(user.hasRole(Role.ADMIN)).isFalse();
         assertThat(user.getRoles()).isEmpty();
     }
 
@@ -90,101 +141,5 @@ class UserTest {
     void rolesCannotBeChangedThroughTheGetter() {
         assertThatThrownBy(() -> user.getRoles().add(Role.ADMIN))
                 .isInstanceOf(UnsupportedOperationException.class);
-    }
-
-    @Test
-    void invitedUserWaitsForActivationNotForEmailConfirmation() {
-        User invited = User.invited(new EmailAddress("student@college.ru"), "Иван Иванов");
-
-        assertThat(invited.getStatus()).isEqualTo(UserStatus.INVITED);
-        assertThat(invited.isAwaitingEmailVerification()).isFalse();
-        assertThat(invited.getRoles()).isEmpty();
-    }
-
-    /** Почту админ не подтверждал: он назначил адрес, а доступа к ящику у студента нет. */
-    @Test
-    void invitedUserHasUnverifiedEmail() {
-        User invited = User.invited(new EmailAddress("student@college.ru"), "Иван Иванов");
-
-        assertThat(invited.isEmailVerified()).isFalse();
-    }
-
-    /** Путь подтверждения почты к выданным учёткам не относится — их активируют по ссылке. */
-    @Test
-    void invitedUserCannotGoThroughEmailConfirmation() {
-        User invited = User.invited(new EmailAddress("student@college.ru"), "Иван Иванов");
-
-        assertThatThrownBy(invited::verifyEmail).isInstanceOf(IllegalStateException.class);
-    }
-
-    @Test
-    void activationMakesInvitedUserActive() {
-        User invited = User.invited(new EmailAddress("student@college.ru"), "Иван Иванов");
-
-        invited.activate();
-
-        assertThat(invited.getStatus()).isEqualTo(UserStatus.ACTIVE);
-    }
-
-    @Test
-    void cannotActivateTwice() {
-        User invited = User.invited(new EmailAddress("student@college.ru"), "Иван Иванов");
-        invited.activate();
-
-        assertThatThrownBy(invited::activate).isInstanceOf(IllegalStateException.class);
-    }
-
-    /** Путь активации — только для выданных админом учёток; саморегистрация идёт через verifyEmail. */
-    @Test
-    void cannotActivateSelfRegisteredUser() {
-        assertThatThrownBy(user::activate).isInstanceOf(IllegalStateException.class);
-    }
-
-    /** Переход по ссылке доказывает получение ссылки, а не владение ящиком. */
-    @Test
-    void activationDoesNotVerifyEmail() {
-        User invited = User.invited(new EmailAddress("student@college.ru"), "Иван Иванов");
-
-        invited.activate();
-
-        assertThat(invited.isEmailVerified()).isFalse();
-    }
-
-    @Test
-    void blockClosesAccessFromAnyLivingStatus() {
-        User invited = User.invited(new EmailAddress("student@college.ru"), "Иван Иванов");
-        invited.block();
-        assertThat(invited.getStatus()).isEqualTo(UserStatus.BLOCKED);
-
-        user.verifyEmail();
-        user.block();
-        assertThat(user.getStatus()).isEqualTo(UserStatus.BLOCKED);
-    }
-
-    @Test
-    void unblockReturnsAccountToTheRequestedStatus() {
-        user.verifyEmail();
-        user.block();
-
-        user.unblock(UserStatus.ACTIVE);
-
-        assertThat(user.getStatus()).isEqualTo(UserStatus.ACTIVE);
-    }
-
-    @Test
-    void cannotUnblockAccountThatIsNotBlocked() {
-        user.verifyEmail();
-
-        assertThatThrownBy(() -> user.unblock(UserStatus.ACTIVE)).isInstanceOf(IllegalStateException.class);
-    }
-
-    /** Разблокировка возвращает только в рабочие состояния — не в LOCKED и не в DELETED. */
-    @Test
-    void cannotUnblockIntoAnArbitraryStatus() {
-        user.verifyEmail();
-        user.block();
-
-        assertThatThrownBy(() -> user.unblock(UserStatus.LOCKED)).isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> user.unblock(UserStatus.DELETED)).isInstanceOf(IllegalArgumentException.class);
     }
 }

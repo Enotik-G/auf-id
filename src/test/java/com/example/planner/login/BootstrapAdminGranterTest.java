@@ -119,8 +119,8 @@ class BootstrapAdminGranterTest {
     }
 
     private User activeUser(String email) {
-        User user = User.selfRegistered(new EmailAddress(email), "Кто-то");
-        user.verifyEmail();
+        User user = User.invited(new EmailAddress(email), "Кто-то");
+        user.activate();
         User saved = userRepository.save(user);
         entityManager.flush();
         return saved;

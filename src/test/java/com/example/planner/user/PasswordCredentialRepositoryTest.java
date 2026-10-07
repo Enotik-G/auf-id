@@ -28,7 +28,7 @@ class PasswordCredentialRepositoryTest {
 
     @Test
     void savesPasswordUnderUsersId() {
-        User user = userRepository.save(User.selfRegistered(new EmailAddress("ivan@mail.ru"), "Иван Петров"));
+        User user = userRepository.save(User.invited(new EmailAddress("ivan@mail.ru"), "Иван Петров"));
         credentialRepository.save(PasswordCredential.forUser(user, FAKE_HASH));
         entityManager.flush();
         entityManager.clear();
@@ -43,14 +43,14 @@ class PasswordCredentialRepositoryTest {
 
     @Test
     void userWithoutPasswordHasNoCredential() {
-        User user = userRepository.saveAndFlush(User.selfRegistered(new EmailAddress("ivan@mail.ru"), "Иван Петров"));
+        User user = userRepository.saveAndFlush(User.invited(new EmailAddress("ivan@mail.ru"), "Иван Петров"));
 
         assertThat(credentialRepository.findById(user.getId())).isEmpty();
     }
 
     @Test
     void rejectsSecondPasswordForSameUser() {
-        User user = userRepository.save(User.selfRegistered(new EmailAddress("ivan@mail.ru"), "Иван Петров"));
+        User user = userRepository.save(User.invited(new EmailAddress("ivan@mail.ru"), "Иван Петров"));
         credentialRepository.saveAndFlush(PasswordCredential.forUser(user, FAKE_HASH));
         entityManager.clear();
 

@@ -8,19 +8,13 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.http.MediaType;
-import org.springframework.mail.javamail.JavaMailSender;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.ResultActions;
 
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestBuilders.formLogin;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /** Лимиты по IP на настоящих запросах ко всему приложению. MockMvc отправляет запросы с адреса 127.0.0.1. */
 @SpringBootTest
@@ -33,9 +27,6 @@ class RateLimitFilterTest {
 
     @Autowired
     private StringRedisTemplate redis;
-
-    @MockitoBean
-    private JavaMailSender mailSender;
 
     @AfterEach
     void clearRedis() {
@@ -55,41 +46,23 @@ class RateLimitFilterTest {
                 .andExpect(header().exists("Retry-After"));
     }
 
-    @Test
-    void sixthRegistrationInAnHourGets429() throws Exception {
-        for (int i = 0; i < 5; i++) {
-            register("user" + i + "@mail.ru").andExpect(status().isAccepted());
-        }
-
-        register("user6@mail.ru")
-                .andExpect(status().isTooManyRequests())
-                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
-                .andExpect(jsonPath("$.status").value(429))
-                .andExpect(header().exists("Retry-After"));
-    }
-
+    /** Своё ведро на каждый адрес: исчерпавший лимит не мешает остальным. */
     @Test
     void anotherIpIsNotAffected() throws Exception {
-        for (int i = 0; i < 5; i++) {
-            register("user" + i + "@mail.ru");
+        for (int i = 0; i < 20; i++) {
+            mockMvc.perform(formLogin().user("guess" + i + "@mail.ru").password("guess " + i));
         }
 
-        mockMvc.perform(registration("other@mail.ru").with(request -> {
-                    request.setRemoteAddr("198.51.100.1");
-                    return request;
-                }))
-                .andExpect(status().isAccepted());
-    }
-
-    private ResultActions register(String email) throws Exception {
-        return mockMvc.perform(registration(email));
-    }
-
-    private org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder registration(String email) {
-        return post("/api/v1/registrations")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("""
-                        {"email": "%s", "fullName": "Иван Петров", "password": "correct horse"}
-                        """.formatted(email));
+        // formLogin() даёт специализированный билдер без .with(...), поэтому запрос собираем сами:
+        // имена полей у него те же, что по умолчанию у Spring Security.
+        mockMvc.perform(post("/login")
+                        .param("username", "other@mail.ru")
+                        .param("password", "guess")
+                        .with(csrf())
+                        .with(request -> {
+                            request.setRemoteAddr("198.51.100.1");
+                            return request;
+                        }))
+                .andExpect(redirectedUrl("/login?error"));
     }
 }

@@ -37,10 +37,10 @@ class LoginPageControllerTest {
     }
 
     @Test
-    void showsHintForUnconfirmedEmail() throws Exception {
-        mockMvc.perform(get("/login?unconfirmed"))
+    void showsHintForBlockedAccount() throws Exception {
+        mockMvc.perform(get("/login?blocked"))
                 .andExpect(status().isOk())
-                .andExpect(content().string(containsString("Почта ещё не подтверждена")));
+                .andExpect(content().string(containsString("Доступ к аккаунту закрыт")));
     }
 
     @Test

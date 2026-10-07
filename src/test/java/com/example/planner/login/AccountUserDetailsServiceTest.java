@@ -89,9 +89,9 @@ class AccountUserDetailsServiceTest {
     }
 
     private User saveUser(String email, boolean confirmed) {
-        User user = User.selfRegistered(new EmailAddress(email), "Иван Петров");
+        User user = User.invited(new EmailAddress(email), "Иван Петров");
         if (confirmed) {
-            user.verifyEmail();
+            user.activate();
         }
         userRepository.save(user);
         credentialRepository.save(PasswordCredential.forUser(user, HASH));
