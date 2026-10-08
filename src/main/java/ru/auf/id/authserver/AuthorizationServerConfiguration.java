@@ -15,7 +15,9 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
 import org.springframework.security.oauth2.jose.jws.SignatureAlgorithm;
+import org.springframework.security.oauth2.server.authorization.OAuth2AuthorizationServerMetadata;
 import org.springframework.security.oauth2.server.authorization.oidc.OidcProviderConfiguration;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
@@ -51,17 +53,23 @@ public class AuthorizationServerConfiguration {
                     http.securityMatcher(new OrRequestMatcher(
                             authorizationServer.getEndpointsMatcher(),
                             preflightToAuthorizationServer()));
+                    // Метаданные OAuth 2.0: /.well-known/oauth-authorization-server.
+                    authorizationServer.authorizationServerMetadataEndpoint(endpoint ->
+                            endpoint.authorizationServerMetadataCustomizer(
+                                    AuthorizationServerConfiguration::announcePublicClients));
                     // OpenID Connect: id_token, /userinfo, /.well-known/openid-configuration.
                     authorizationServer.oidc(oidc -> oidc.providerConfigurationEndpoint(endpoint ->
-                            endpoint.providerConfigurationCustomizer(
-                                    AuthorizationServerConfiguration::announceEs256)));
+                            endpoint.providerConfigurationCustomizer(configuration -> {
+                                announceEs256(configuration);
+                                announcePublicClients(configuration);
+                            })));
                 })
                 // Браузерные клиенты (SPA) с других адресов обменивают код на токен через fetch —
                 // без CORS-заголовков браузер не отдаст им ответ.
                 .cors(cors -> cors.configurationSource(corsConfigurationSource(allowedOrigins)))
                 .authorizeHttpRequests(requests -> requests
                         // Молчаливое продление входа (prompt=none) должно дойти до Spring, а не
-                        // упереться в правило ниже: см. allowSilentAuthorization.
+                        // упереться в правило ниже: см. silentAuthorizationRequest.
                         .requestMatchers(silentAuthorizationRequest(authorizationServerSettings)).permitAll()
                         .anyRequest().authenticated())
                 // /userinfo принимает access token в заголовке Authorization — проверяем его как JWT.
@@ -115,6 +123,37 @@ public class AuthorizationServerConfiguration {
     private static boolean requestsNoPrompt(HttpServletRequest request) {
         String prompt = request.getParameter("prompt");
         return prompt != null && Set.of(prompt.trim().split("\\s+")).contains("none");
+    }
+
+    /**
+     * Сообщает в метаданных, что сервер принимает клиентов <b>без секрета</b> — способ
+     * аутентификации {@code none}.
+     *
+     * <p>Spring перечисляет только способы с секретом или сертификатом, и {@code none} в список не
+     * попадает. При этом публичные клиенты у нас есть — вид {@code BROWSER} (приложение в браузерной
+     * вкладке) ходит на {@code /oauth2/token} вообще без секрета, его защищает PKCE.
+     *
+     * <p>Без этой строчки discovery описывает сервер неверно: строгая библиотека OIDC-клиента
+     * прочитает список, не найдёт там своего способа и либо откажется идти за токеном, либо выберет
+     * способ, для которого у неё нет секрета. Ошибка того же рода, что подпись {@code RS256}
+     * в {@link #announceEs256} — сервер умеет одно, а рассказывает о себе другое.
+     *
+     * <p>Правится в двух местах: метаданные отдают <b>две</b> ручки, OpenID Connect и OAuth 2.0,
+     * и список в них свой у каждой.
+     */
+    private static void announcePublicClients(OidcProviderConfiguration.Builder configuration) {
+        configuration.tokenEndpointAuthenticationMethod(ClientAuthenticationMethod.NONE.getValue());
+    }
+
+    /**
+     * То же для метаданных OAuth 2.0 — см. {@link #announcePublicClients(OidcProviderConfiguration.Builder)}.
+     *
+     * <p>Двух перегрузок не избежать: общий родитель обоих построителей
+     * ({@code AbstractOAuth2AuthorizationServerMetadata.AbstractBuilder}) объявлен {@code protected},
+     * и взять его параметром снаружи нельзя.
+     */
+    private static void announcePublicClients(OAuth2AuthorizationServerMetadata.Builder metadata) {
+        metadata.tokenEndpointAuthenticationMethod(ClientAuthenticationMethod.NONE.getValue());
     }
 
     /** Предварительный запрос (OPTIONS) к адресам сервера авторизации, которые читают из JavaScript. */
