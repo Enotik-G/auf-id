@@ -70,14 +70,50 @@ public class HashedTokenAuthorizationService implements OAuth2AuthorizationServi
             OAuth2DeviceCode.class);
 
     private final OAuth2AuthorizationService delegate;
+    private final RefreshTokenReuseDetector reuseDetector;
 
-    public HashedTokenAuthorizationService(OAuth2AuthorizationService delegate) {
+    public HashedTokenAuthorizationService(OAuth2AuthorizationService delegate,
+                                           RefreshTokenReuseDetector reuseDetector) {
         this.delegate = delegate;
+        this.reuseDetector = reuseDetector;
     }
 
     @Override
     public void save(OAuth2Authorization authorization) {
+        rememberRotatedRefreshToken(authorization);
         delegate.save(withHashedTokens(authorization));
+    }
+
+    /**
+     * Перед записью смотрит, не вытесняется ли прежний refresh-токен новым, и если да — отдаёт его
+     * хеш в реестр погашенных ({@link RefreshTokenReuseDetector}).
+     *
+     * <p>Это единственное место, где прежнее значение ещё можно увидеть: сохранение его затрёт, и
+     * дальше повторное предъявление украденного токена было бы не отличить от опечатки.
+     *
+     * <p>Лишний запрос в БД на каждое сохранение — осознанная цена. Сохранения редки: выдача кода,
+     * обмен кода, обновление токена, отзыв. На пути проверки токена сервисами этого нет вовсе —
+     * они в базу не ходят.
+     */
+    private void rememberRotatedRefreshToken(OAuth2Authorization authorization) {
+        OAuth2Authorization.Token<OAuth2RefreshToken> incoming = authorization.getRefreshToken();
+        if (incoming == null) {
+            // Авторизация без refresh-токена: вытеснять нечего (например, только что выдан код).
+            return;
+        }
+        OAuth2Authorization stored = delegate.findById(authorization.getId());
+        if (stored == null || stored.getRefreshToken() == null) {
+            // Первая выдача refresh-токена этой авторизации — это не ротация.
+            return;
+        }
+
+        String previousValue = stored.getRefreshToken().getToken().getTokenValue();
+        if (previousValue.equals(hashed(incoming.getToken().getTokenValue()))) {
+            // Тот же токен сохраняют снова (например, при отзыве access-токена) — ротации не было.
+            return;
+        }
+        reuseDetector.remember(
+                previousValue, authorization.getPrincipalName(), authorization.getRegisteredClientId());
     }
 
     @Override
@@ -96,12 +132,25 @@ public class HashedTokenAuthorizationService implements OAuth2AuthorizationServi
         if (STATE.equals(tokenType)) {
             return delegate.findByToken(token, tokenType);
         }
-        OAuth2Authorization found = delegate.findByToken(hash(token), tokenType);
-        if (found == null && tokenType == null) {
+        String hashedToken = hash(token);
+        OAuth2Authorization found = delegate.findByToken(hashedToken, tokenType);
+        if (found != null) {
+            return withRawValue(found, token);
+        }
+
+        // Токена в базе нет. Для refresh-токена это может означать не опечатку, а кражу: его уже
+        // погасили ротацией, а предъявляют снова. Проверяем только здесь, в самом потоке обновления.
+        // Отзыв и introspection (tokenType == null) сюда не включены намеренно: честный клиент
+        // вправе попросить отозвать токен, который уже не действует, и выбрасывать за это человека
+        // из приложения было бы неверно.
+        if (OAuth2TokenType.REFRESH_TOKEN.equals(tokenType)) {
+            reuseDetector.revokeIfReused(hashedToken);
+        }
+        if (tokenType == null) {
             // «Любой тип» (так ищут отзыв и introspection) — это может быть и state, он лежит как есть.
             return delegate.findByToken(token, STATE);
         }
-        return found == null ? null : withRawValue(found, token);
+        return null;
     }
 
     /** Копия авторизации, где значения всех токенов заменены на хеши. Метаданные (сроки, claims, «отозван») те же. */
@@ -151,6 +200,11 @@ public class HashedTokenAuthorizationService implements OAuth2AuthorizationServi
 
     private static boolean isHash(String value) {
         return value.startsWith(HASH_PREFIX);
+    }
+
+    /** Значение в том виде, в каком оно лежит в БД: уже хеш — как есть, сырое — хешируем. */
+    private static String hashed(String value) {
+        return isHash(value) ? value : hash(value);
     }
 
     static String hash(String value) {

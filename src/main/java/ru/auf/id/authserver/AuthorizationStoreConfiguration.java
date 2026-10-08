@@ -24,9 +24,14 @@ public class AuthorizationStoreConfiguration {
     }
 
     @Bean
-    OAuth2AuthorizationService authorizationService(JdbcOperations jdbc, RegisteredClientRepository clients) {
+    OAuth2AuthorizationService authorizationService(JdbcOperations jdbc,
+                                                    RegisteredClientRepository clients,
+                                                    RefreshTokenReuseDetector reuseDetector) {
         // Коды и токены — в БД только хешами, см. HashedTokenAuthorizationService.
-        return new HashedTokenAuthorizationService(new JdbcOAuth2AuthorizationService(jdbc, clients));
+        // Он же замечает повторное предъявление погашенного refresh-токена — только у него есть
+        // прежнее значение в тот момент, когда оно затирается новым.
+        return new HashedTokenAuthorizationService(
+                new JdbcOAuth2AuthorizationService(jdbc, clients), reuseDetector);
     }
 
     @Bean
