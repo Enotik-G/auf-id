@@ -179,6 +179,54 @@ class AuthorizationServerTest {
         assertThat(stored).isEqualTo(1);
     }
 
+    /**
+     * Утечка дампа БД не должна выдавать живые коды и токены: в колонках значений лежат только
+     * их хеши SHA-256, предъявить такой «токен» нельзя.
+     *
+     * <p>ФИО и почта этим <b>не закрыты</b>: они остаются в {@code *_metadata} —
+     * см. {@link HashedTokenAuthorizationService}.
+     */
+    @Test
+    void codeAndTokensAreStoredOnlyAsHashes() throws Exception {
+        String code = authorize();
+        String tokens = exchangeCodeForTokens(code);
+        String accessToken = JsonPath.read(tokens, "$.access_token");
+        String idToken = JsonPath.read(tokens, "$.id_token");
+
+        var row = jdbc.queryForMap(
+                "SELECT authorization_code_value, access_token_value, oidc_id_token_value"
+                        + " FROM oauth2_authorization WHERE principal_name = ?",
+                user.getId().toString());
+
+        assertThat(row.get("authorization_code_value")).isEqualTo(HashedTokenAuthorizationService.hash(code));
+        assertThat(row.get("access_token_value")).isEqualTo(HashedTokenAuthorizationService.hash(accessToken));
+        assertThat(row.get("oidc_id_token_value")).isEqualTo(HashedTokenAuthorizationService.hash(idToken));
+        assertThat(row.values()).allSatisfy(value -> assertThat((String) value).startsWith("sha256:"));
+    }
+
+    /**
+     * Код одноразовый: второй обмен того же кода отклоняется.
+     *
+     * <p>Тест стоит именно здесь, рядом с хешированием: отметку «код использован» Spring хранит в
+     * метаданных токена, а {@link HashedTokenAuthorizationService} пересобирает токен, подменяя
+     * значение. Потеряйся при этом метаданные — код остался бы одноразовым только на словах,
+     * и заметить это по остальным тестам было бы нельзя.
+     */
+    @Test
+    void sameCodeCannotBeExchangedTwice() throws Exception {
+        String code = authorize();
+        exchangeCodeForTokens(code);
+
+        mockMvc.perform(post("/oauth2/token")
+                        .param("grant_type", "authorization_code")
+                        .param("code", code)
+                        .param("redirect_uri", REDIRECT_URI)
+                        .param("client_id", CLIENT_ID)
+                        .param("code_verifier", codeVerifier))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("invalid_grant"));
+    }
+
     @Test
     void userinfoReturnsSubjectForIssuedToken() throws Exception {
         String accessToken = JsonPath.read(exchangeCodeForTokens(authorize()), "$.access_token");

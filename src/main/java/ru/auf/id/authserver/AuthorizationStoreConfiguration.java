@@ -25,7 +25,8 @@ public class AuthorizationStoreConfiguration {
 
     @Bean
     OAuth2AuthorizationService authorizationService(JdbcOperations jdbc, RegisteredClientRepository clients) {
-        return new JdbcOAuth2AuthorizationService(jdbc, clients);
+        // Коды и токены — в БД только хешами, см. HashedTokenAuthorizationService.
+        return new HashedTokenAuthorizationService(new JdbcOAuth2AuthorizationService(jdbc, clients));
     }
 
     @Bean
