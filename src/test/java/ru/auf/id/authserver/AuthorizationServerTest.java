@@ -46,7 +46,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * Весь путь «войти через Auth» по OAuth 2.1 + OIDC — так, как его пройдёт планировщик.
- * Клиент — временный planner-dev из application.properties.
+ * Клиент — planner-dev, его при запуске заводит в БД DevClientRegistration (только в разработке).
  */
 @SpringBootTest
 @AutoConfigureMockMvc
