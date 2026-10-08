@@ -18,7 +18,7 @@ import org.hibernate.annotations.UuidGenerator;
 import java.time.Instant;
 import java.util.UUID;
 
-/** Одноразовый токен из ссылки в письме. В БД хранится только SHA-256 от токена, не сам токен. */
+/** Одноразовый токен из ссылки активации или сброса пароля. В БД — только SHA-256 от него, не сам токен. */
 @Entity
 @Table(name = "one_time_tokens")
 @Getter

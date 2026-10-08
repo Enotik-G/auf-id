@@ -22,7 +22,7 @@ public class ActivationPageController {
     public static final String ACTIVATE_PATH = "/activate";
     public static final String DONE_PATH = ACTIVATE_PATH + "/done";
 
-    /** То же правило, что у саморегистрации в RegistrationRequest: минимум по рекомендации NIST. */
+    /** Минимальная длина пароля по рекомендации NIST (SP 800-63B): 8 символов, без требований к составу. */
     private static final int MIN_PASSWORD_LENGTH = 8;
     private static final int MAX_PASSWORD_LENGTH = 128;
 
