@@ -408,6 +408,28 @@ class AuthorizationServerTest {
                 .andExpect(jsonPath("$.email_verified").value(false));
     }
 
+    /**
+     * {@code /userinfo} собирается из таблицы {@code users}, а не из claims, снятых при входе
+     * (шаг 24). Проверяем наблюдаемое следствие: исправили ФИО после входа — следующий запрос
+     * вернёт новое, хотя id_token остался прежним.
+     *
+     * <p>До шага 24 здесь вернулось бы старое значение: Spring отдавал поля сохранённого id_token.
+     */
+    @Test
+    void userinfoReturnsCurrentProfileNotTheOneCapturedAtLogin() throws Exception {
+        String accessToken = JsonPath.read(exchangeCodeForTokens(authorize()), "$.access_token");
+
+        // Правим ФИО прямо в базе: сущность User намеренно без сеттеров, а нам нужно именно
+        // «данные изменились после входа».
+        jdbc.update("UPDATE users SET full_name = ? WHERE id = ?", "Иван Сидоров", user.getId());
+
+        mockMvc.perform(get("/userinfo").header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.sub").value(user.getId().toString()))
+                .andExpect(jsonPath("$.name").value("Иван Сидоров"))
+                .andExpect(jsonPath("$.email").value(EMAIL));
+    }
+
     @Test
     void devClientsAreRegisteredInDatabaseOnlyOnce() {
         devClientRegistration.run(null);
