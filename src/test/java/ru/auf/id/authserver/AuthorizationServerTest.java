@@ -234,6 +234,26 @@ class AuthorizationServerTest {
     }
 
     /**
+     * В строке авторизации не остаётся ни ФИО, ни почты (шаг 24).
+     *
+     * <p>Шаг 12 захешировал значения токенов, но claims Spring хранит рядом обычным JSON — и до
+     * шага 24 в колонках {@code *_metadata} лежало «Иван Петров» и {@code ivan@mail.ru}. Зонд по
+     * <b>всем</b> колонкам: так проверка не зависит от того, в какую именно их положит Spring.
+     */
+    @Test
+    void authorizationRowKeepsNoPersonalData() throws Exception {
+        exchangeCodeForTokens(authorize());
+
+        var row = jdbc.queryForMap("SELECT * FROM oauth2_authorization WHERE principal_name = ?",
+                user.getId().toString());
+        String wholeRow = String.valueOf(row);
+
+        assertThat(wholeRow).doesNotContain("Иван Петров").doesNotContain(EMAIL);
+        // Служебные claims остаться должны: по ним работают выход и introspection.
+        assertThat(wholeRow).contains("auth_time");
+    }
+
+    /**
      * Код одноразовый: второй обмен того же кода отклоняется.
      *
      * <p>Тест стоит именно здесь, рядом с хешированием: отметку «код использован» Spring хранит в
