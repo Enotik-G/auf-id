@@ -291,6 +291,10 @@ BOOTSTRAP_ADMIN_EMAILS=director@college.ru,boss@college.ru
 
 ## Подключение своего сервиса
 
+> **Разработчику другого сервиса — отдельная страница: [Как подключить свой сервис к AUF ID](docs/service-integration.md).**
+> Там всё то же самое, но собрано под одну задачу и без внутренних деталей AUF ID — её можно
+> давать ссылкой. Ниже — то же для тех, кто уже в этом README.
+
 ### Протокол
 
 **OAuth 2.1 / OpenID Connect, Authorization Code + PKCE (S256, обязателен).**
