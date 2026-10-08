@@ -1,7 +1,11 @@
 package ru.auf.id.authserver;
 
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.security.oauth2.server.authorization.settings.AuthorizationServerSettings;
+
 import java.time.Duration;
 import java.util.List;
+import java.util.Set;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -37,6 +41,7 @@ public class AuthorizationServerConfiguration {
     @Order(1)
     SecurityFilterChain authorizationServerSecurityFilterChain(
             HttpSecurity http,
+            AuthorizationServerSettings authorizationServerSettings,
             @Value("${auth.cors.allowed-origins:}") List<String> allowedOrigins) throws Exception {
         http
                 .oauth2AuthorizationServer(authorizationServer -> {
@@ -54,7 +59,11 @@ public class AuthorizationServerConfiguration {
                 // Браузерные клиенты (SPA) с других адресов обменивают код на токен через fetch —
                 // без CORS-заголовков браузер не отдаст им ответ.
                 .cors(cors -> cors.configurationSource(corsConfigurationSource(allowedOrigins)))
-                .authorizeHttpRequests(requests -> requests.anyRequest().authenticated())
+                .authorizeHttpRequests(requests -> requests
+                        // Молчаливое продление входа (prompt=none) должно дойти до Spring, а не
+                        // упереться в правило ниже: см. allowSilentAuthorization.
+                        .requestMatchers(silentAuthorizationRequest(authorizationServerSettings)).permitAll()
+                        .anyRequest().authenticated())
                 // /userinfo принимает access token в заголовке Authorization — проверяем его как JWT.
                 .oauth2ResourceServer(resourceServer -> resourceServer.jwt(Customizer.withDefaults()))
                 // Не вошедшего человека (браузер) отправляем на нашу страницу входа,
@@ -77,6 +86,35 @@ public class AuthorizationServerConfiguration {
             algorithms.clear();
             algorithms.add(SignatureAlgorithm.ES256.getName());
         });
+    }
+
+    /**
+     * Запрос «продли вход, если человек уже вошёл, и не показывай форму» — {@code prompt=none}
+     * из OpenID Connect Core (3.1.2.1). Так браузерное приложение (планировщик) обновляет
+     * истёкший access-токен, потому что refresh-токена у него нет.
+     *
+     * <p><b>Зачем отдельное правило.</b> По стандарту не вошедшему человеку сервер обязан вернуть
+     * на {@code redirect_uri} ошибку {@code login_required} — приложение по ней понимает, что пора
+     * отправлять человека входить по-настоящему. Spring это умеет
+     * ({@code OAuth2AuthorizationCodeRequestAuthenticationProvider}), но до него запрос не доходил:
+     * {@code anyRequest().authenticated()} отвечал редиректом на страницу входа. Вместо ошибки
+     * приложение получало HTML-страницу и разобрать её не могло.
+     *
+     * <p><b>Почему это не дыра.</b> {@code permitAll} здесь не выдаёт ничего: запрос доходит до
+     * Spring, тот проверяет клиента, {@code redirect_uri} и PKCE, видит, что человек не вошёл, и
+     * отдаёт ошибку. Код авторизации выдаётся только вошедшему — это решает Spring, а не это
+     * правило. А вошедший и так проходил по {@code authenticated()}.
+     */
+    private static RequestMatcher silentAuthorizationRequest(AuthorizationServerSettings settings) {
+        RequestMatcher authorizationEndpoint = PathPatternRequestMatcher.withDefaults()
+                .matcher(settings.getAuthorizationEndpoint());
+        return request -> authorizationEndpoint.matches(request) && requestsNoPrompt(request);
+    }
+
+    /** {@code prompt} — список через пробел, нас интересует значение {@code none} в нём. */
+    private static boolean requestsNoPrompt(HttpServletRequest request) {
+        String prompt = request.getParameter("prompt");
+        return prompt != null && Set.of(prompt.trim().split("\\s+")).contains("none");
     }
 
     /** Предварительный запрос (OPTIONS) к адресам сервера авторизации, которые читают из JavaScript. */

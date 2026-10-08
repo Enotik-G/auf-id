@@ -341,14 +341,89 @@ class AuthorizationServerTest {
         assertThat(countOf(DevClientRegistration.PLANNER_CLIENT_ID)).isEqualTo(1);
     }
 
-    /** Планировщик — серверное приложение: refresh-токен ему не нужен, сессию он держит сам. */
-    @Test
-    void plannerDevClientHasNoRefreshTokenGrant() {
-        var grantTypes = jdbc.queryForObject(
-                "SELECT authorization_grant_types FROM oauth2_registered_client WHERE client_id = ?",
-                String.class, DevClientRegistration.PLANNER_CLIENT_ID);
+    // ─────────────────── продление входа для браузерного клиента (планировщик) ───────────────────
 
-        assertThat(grantTypes).contains("authorization_code").doesNotContain("refresh_token");
+    /**
+     * Планировщик живёт в браузере: refresh-токена у него нет и секрета тоже — украл бы XSS.
+     */
+    @Test
+    void plannerDevClientIsPublicAndHasNoRefreshTokenGrant() {
+        var client = jdbc.queryForMap(
+                "SELECT authorization_grant_types, client_authentication_methods, client_secret"
+                        + " FROM oauth2_registered_client WHERE client_id = ?",
+                DevClientRegistration.PLANNER_CLIENT_ID);
+
+        assertThat((String) client.get("authorization_grant_types"))
+                .contains("authorization_code").doesNotContain("refresh_token");
+        assertThat((String) client.get("client_authentication_methods")).isEqualTo("none");
+        assertThat(client.get("client_secret")).isNull();
+    }
+
+    /**
+     * Так планировщик продлевает вход: уже вошедший человек заходит на /oauth2/authorize с
+     * {@code prompt=none} и получает новый код <b>без формы входа</b>. Это замена refresh-токену
+     * для браузерного приложения, поэтому путь закреплён тестом.
+     */
+    @Test
+    void browserClientRenewsLoginSilentlyWithPromptNone() throws Exception {
+        MockHttpSession session = logIn();
+
+        var params = plannerAuthorizeParams();
+        params.add("prompt", "none");
+
+        MvcResult result = mockMvc.perform(get("/oauth2/authorize").queryParams(params).session(session))
+                .andExpect(status().is3xxRedirection())
+                .andReturn();
+
+        var redirect = UriComponentsBuilder.fromUriString(result.getResponse().getRedirectedUrl()).build();
+        assertThat(redirect.toUriString()).startsWith(DevClientRegistration.PLANNER_REDIRECT_URI);
+        assertThat(redirect.getQueryParams().getFirst("code")).isNotBlank();
+        assertThat(redirect.getQueryParams().getFirst("error")).isNull();
+    }
+
+    /**
+     * Не вошедшему {@code prompt=none} отдаёт ошибку {@code login_required}, а не форму входа:
+     * вкладка по этому признаку понимает, что человека надо отправить входить по-настоящему.
+     */
+    @Test
+    void promptNoneWithoutSessionReturnsLoginRequired() throws Exception {
+        var params = plannerAuthorizeParams();
+        params.add("prompt", "none");
+
+        MvcResult result = mockMvc.perform(get("/oauth2/authorize").queryParams(params))
+                .andExpect(status().is3xxRedirection())
+                .andReturn();
+
+        var redirect = UriComponentsBuilder.fromUriString(result.getResponse().getRedirectedUrl()).build();
+        assertThat(redirect.toUriString()).startsWith(DevClientRegistration.PLANNER_REDIRECT_URI);
+        assertThat(redirect.getQueryParams().getFirst("error")).isEqualTo("login_required");
+    }
+
+    /**
+     * Продлевать вход скрытым iframe нельзя: ответ /oauth2/authorize запрещает встраивание в рамку.
+     *
+     * <p>Это умолчание Spring Security, и менять его мы не собираемся — защита от clickjacking на
+     * странице входа. Но для браузерного клиента это значит, что молчаливое продление делается
+     * <b>переходом страницы</b> (или всплывающим окном), а не невидимым iframe, как часто пишут в
+     * статьях про SPA. Тест стоит здесь, чтобы это ограничение нашли до того, как напишут iframe.
+     */
+    @Test
+    void authorizeEndpointForbidsBeingEmbeddedInAnIframe() throws Exception {
+        mockMvc.perform(get("/oauth2/authorize").queryParams(plannerAuthorizeParams()).session(logIn()))
+                .andExpect(header().string("X-Frame-Options", "DENY"));
+    }
+
+    private org.springframework.util.LinkedMultiValueMap<String, String> plannerAuthorizeParams()
+            throws Exception {
+        var params = new org.springframework.util.LinkedMultiValueMap<String, String>();
+        params.add("response_type", "code");
+        params.add("client_id", DevClientRegistration.PLANNER_CLIENT_ID);
+        params.add("scope", "openid profile email");
+        params.add("redirect_uri", DevClientRegistration.PLANNER_REDIRECT_URI);
+        params.add("state", "xyz");
+        params.add("code_challenge", codeChallenge(codeVerifier));
+        params.add("code_challenge_method", "S256");
+        return params;
     }
 
     private Integer countOf(String clientId) {

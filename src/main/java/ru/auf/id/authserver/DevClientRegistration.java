@@ -26,17 +26,17 @@ import java.util.UUID;
  * <ul>
  *   <li>{@value #LAUNCHER_CLIENT_ID} — вид {@code NATIVE}: возврат на локальный порт,
  *       refresh-токен на 30 дней с ротацией;</li>
- *   <li>{@value #PLANNER_CLIENT_ID} — вид {@code CONFIDENTIAL}: серверное приложение со своей
- *       сессией, refresh-токен ему не нужен (истёк access-токен — вкладка молча идёт на
- *       {@code /oauth2/authorize}, где её узнаёт сессия провайдера).</li>
+ *   <li>{@value #PLANNER_CLIENT_ID} — вид {@code BROWSER}: приложение живёт в браузерной вкладке
+ *       (решение 2026-10-08). Без секрета — спрятать его в JavaScript негде; без refresh-токена —
+ *       его украл бы XSS. Вход продлевается молчаливым заходом на {@code /oauth2/authorize} с
+ *       {@code prompt=none}: сессию вкладки узнаёт сам провайдер и сразу возвращает код.</li>
  * </ul>
  *
- * <p><b>Планировщику клиент нужен не всегда.</b> Если python-микросервис только проверяет JWT и
- * сам никого не пускает внутрь (а вход делает фронтенд или шлюз перед ним) — он не клиент, а
- * <i>сервер ресурсов</i>: ему достаточно читать {@code jwks_uri} из discovery и сверять подпись,
- * {@code iss}, {@code aud} и {@code exp}. Регистрировать его в этом случае не нужно вовсе, а
- * клиентом станет тот, кто ведёт человека на страницу входа. Клиент
- * {@value #PLANNER_CLIENT_ID} здесь — для случая, когда вход делает сам планировщик.
+ * <p><b>Python-микросервис планировщика клиентом не является.</b> Клиент — тот, кто ведёт человека
+ * на страницу входа, то есть браузерное приложение. Микросервис за ним только проверяет готовый
+ * токен, а значит он <i>сервер ресурсов</i>: ему достаточно прочитать {@code jwks_uri} из discovery
+ * и сверять подпись, {@code iss}, {@code aud} и {@code exp}. Регистрировать его в AUF ID не нужно
+ * вовсе, и секрета у него нет.
  *
  * <p>Включается только явно: {@code auth.dev-client.enabled=true} (локально — в {@code .env},
  * в тестах — в тестовых настройках). На сервере выключен: адреса возврата на 127.0.0.1 там не нужны,
@@ -51,9 +51,15 @@ public class DevClientRegistration implements ApplicationRunner {
     static final String LAUNCHER_CLIENT_ID = "launcher-dev";
     static final String LAUNCHER_REDIRECT_URI = "http://127.0.0.1:8090/login/oauth2/code/auth";
 
-    /** Планировщик: серверное приложение, возврат на свой адрес. */
+    /**
+     * Планировщик: браузерное приложение.
+     *
+     * <p>Порт в адресе возврата не важен — Spring разрешает любой для loopback-адресов
+     * (RFC 8252 §7.3), поэтому dev-сервер фронтенда может слушать 5173, 3000 или что угодно.
+     * А вот <b>путь сверяется точно</b>: {@value #PLANNER_REDIRECT_URI} должен совпадать.
+     */
     static final String PLANNER_CLIENT_ID = "planner-dev";
-    static final String PLANNER_REDIRECT_URI = "http://127.0.0.1:8000/auth/callback";
+    static final String PLANNER_REDIRECT_URI = "http://127.0.0.1:5173/auth/callback";
 
     /** Access token живёт 10 минут: сервисы проверяют его сами, без запроса в Auth (решение архитектуры). */
     static final Duration ACCESS_TOKEN_LIFETIME = Duration.ofMinutes(10);
@@ -66,7 +72,6 @@ public class DevClientRegistration implements ApplicationRunner {
      * клиенты свои секреты получат через админку. Прятать эти негде и незачем.
      */
     static final String LAUNCHER_CLIENT_SECRET = "launcher-dev-secret";
-    static final String PLANNER_CLIENT_SECRET = "planner-dev-secret";
 
     private final RegisteredClientRepository clients;
     private final PasswordEncoder passwordEncoder;
@@ -85,8 +90,12 @@ public class DevClientRegistration implements ApplicationRunner {
     }
 
     private RegisteredClient launcherClient() {
-        return common(LAUNCHER_CLIENT_ID, "Лаунчер Minecraft (разработка)",
-                LAUNCHER_REDIRECT_URI, LAUNCHER_CLIENT_SECRET)
+        return userFacing(LAUNCHER_CLIENT_ID, "Лаунчер Minecraft (разработка)", LAUNCHER_REDIRECT_URI)
+                // Секрет есть, хотя спрятать его в настольной программе невозможно: без него Spring
+                // не даёт обменять refresh-токен. Почему это допустимо — в ClientKind.NATIVE;
+                // защищает здесь PKCE, а не секрет.
+                .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
+                .clientSecret(passwordEncoder.encode(LAUNCHER_CLIENT_SECRET))
                 // Обновление access-токена без участия человека — то, без чего лаунчер нежизнеспособен.
                 .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
                 .tokenSettings(TokenSettings.builder()
@@ -100,28 +109,22 @@ public class DevClientRegistration implements ApplicationRunner {
     }
 
     private RegisteredClient plannerClient() {
-        return common(PLANNER_CLIENT_ID, "Планировщик (разработка)",
-                PLANNER_REDIRECT_URI, PLANNER_CLIENT_SECRET)
-                // Без grant refresh_token: серверное приложение держит сессию с человеком само.
+        return userFacing(PLANNER_CLIENT_ID, "Планировщик (разработка)", PLANNER_REDIRECT_URI)
+                // Публичный клиент: секрет в JavaScript спрятать негде, защищает PKCE.
+                .clientAuthenticationMethod(ClientAuthenticationMethod.NONE)
+                // Без grant refresh_token: в браузере его украл бы XSS. Вход продлевается
+                // заходом на /oauth2/authorize с prompt=none.
                 .tokenSettings(TokenSettings.builder()
                         .accessTokenTimeToLive(ACCESS_TOKEN_LIFETIME)
                         .build())
                 .build();
     }
 
-    /**
-     * Общее у обоих: вход человека по коду с обязательным PKCE и секрет клиента.
-     *
-     * <p>Секрет есть и у лаунчера, хотя спрятать его в настольной программе невозможно — без него
-     * Spring не даёт обменять refresh-токен. Почему это допустимо, разобрано в
-     * {@code ClientKind.NATIVE}; защищает здесь PKCE, а не секрет.
-     */
-    private RegisteredClient.Builder common(String clientId, String name, String redirectUri, String secret) {
+    /** Общее у обоих: вход человека по коду с обязательным PKCE. Способ аутентификации — свой у каждого. */
+    private RegisteredClient.Builder userFacing(String clientId, String name, String redirectUri) {
         return RegisteredClient.withId(UUID.randomUUID().toString())
                 .clientId(clientId)
                 .clientName(name)
-                .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
-                .clientSecret(passwordEncoder.encode(secret))
                 .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
                 .redirectUri(redirectUri)
                 .scope(OidcScopes.OPENID)
