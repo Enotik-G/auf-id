@@ -20,8 +20,12 @@
 
 Это **Auth Service** — единый OpenID-провайдер (SSO) колледжа. Сейчас цель — **минимально рабочая версия (MVP)**, но с прицелом на будущее: сервис должен стать **ядром внутренней цифровой экосистемы**.
 
-- **Первый и пока единственный клиент — лаунчер Minecraft** (решение от 2026-10-08, отменяет «первым будет планировщик»). Отдельный репозиторий; настольное приложение.
-- Сервис планирования не отменён, но сроков у него нет. Примерно через год — другие учебные сервисы (meet, соцсеть, доска, заметки и т.д.).
+- **Первые клиенты — лаунчер Minecraft и сервис планирования, оба делаются одновременно** (решение от 2026-10-08). Каждый в своём репозитории.
+- Это не одна задача дважды: лаунчер — настольное приложение (вид клиента `NATIVE`, продлевает вход **refresh-токеном**); планировщик — **чисто браузерное приложение** с python-микросервисом за ним (вид `BROWSER`, продлевает вход заходом на `/oauth2/authorize` с `prompt=none`). Разбор — раздел 6 документа.
+- **Python-микросервис планировщика клиентом не является** — он сервер ресурсов. Клиент тот, кто ведёт человека на страницу входа, то есть браузерное приложение. Микросервис только проверяет готовый токен: `jwks_uri` из discovery, подпись, `iss`, `aud`, `exp`. Регистрировать его в AUF ID не нужно.
+- **Продлевать вход скрытым iframe нельзя:** `/oauth2/authorize` отвечает `X-Frame-Options: DENY` (умолчание Spring Security, менять не планируем). Только переход страницы или всплывающее окно. Закреплено тестом.
+- **Дополнительного кода в Auth ни одному из них не требуется**: подключаются регистрацией клиента через админку.
+- Примерно через год — другие учебные сервисы (meet, соцсеть, доска, заметки и т.д.).
 
 **Решения по лаунчеру (2026-10-08):**
 
@@ -47,6 +51,8 @@
 ## Документация
 
 `docs/Auth Service — архитектура SSO для экосистемы колледжа.md` — полная архитектура: требования, схема БД, список ручек API, план по фазам. Файл **хранится в репозитории** (коммит `ba08644`).
+
+`docs/service-integration.md` — **инструкция для разработчиков других сервисов**: кто такой сервер ресурсов и кто клиент, что проверять в токене, что в нём лежит, подводные камни, локальная разработка. Её дают ссылкой наружу, поэтому внутренних деталей AUF ID там нет. **Меняется контракт — правится и она:** состав claims, сроки токенов, виды клиентов, лимиты.
 
 ## Стек
 
@@ -204,8 +210,8 @@ Remote: `https://github.com/Enotik-G/auf-id.git` (репозиторий пер�
 - [ ] **3. Authorization Server** (выдача JWT) ← **сейчас здесь**
   - [x] 3.1 Spring Authorization Server подключён (`authserver/AuthorizationServerConfiguration` — своя цепочка фильтров `@Order(1)`, наша `SecurityConfiguration` — `@Order(2)`), OIDC, **временный** клиент `planner-dev` в `application.properties` (публичный, PKCE обязателен, access token 10 мин). Путь «authorize → код → token» работает; `sub` = id пользователя.
   - [x] 3.2 Ключ подписи **ES256** из `JWT_SIGNING_KEY` (закрытый ключ P-256, PKCS#8, base64; открытый вычисляется из него — `authserver/EcSigningKey`, `kid` — отпечаток ключа по RFC 7638, стабилен). `JwtConfiguration`: свой `JWKSource` (Spring Boot больше не генерирует RSA при каждом запуске) и `OAuth2TokenCustomizer` — ES256 для **всех** токенов (по умолчанию access token — RS256). Проверено: токен проходит проверку подписи по JWKS и после перезапуска.
-  - [x] 3.3 Клиенты и выданные авторизации — в БД: миграция `005` (официальные схемы Spring AS + `text`/`timestamptz`, уникальный `client_id`, внешние ключи, индексы по кодам/токенам), `AuthorizationStoreConfiguration` — JDBC-репозитории Spring. Клиент `planner-dev` для разработки — `DevClientRegistration`, регистрируется при запуске **только при `auth.dev-client.enabled=true`** (локально `AUTH_DEV_CLIENT_ENABLED=true` в `.env`, в тестах — тестовые настройки; на сервере выключен). Секреты клиентов (когда появятся конфиденциальные клиенты) проверяются бином `PasswordEncoder` — это наш `PepperedPasswordEncoder`.
-  - [x] 3.4 Свои поля в токене и `/userinfo`: `name` при scope `profile`, `email` и `email_verified` при scope `email` (OpenID Connect Core, 5.4) — `authserver/UserClaims`. Подключён в **единственный** разрешённый бин `OAuth2TokenCustomizer<JwtEncodingContext>` (`JwtConfiguration.tokenCustomizer`): второй бин этого типа уронил бы старт с `NoUniqueBeanDefinitionException`, поэтому подпись ES256 и claims живут в одной лямбде. Клиенту `planner-dev` добавлен scope `email`. **`/userinfo` заработал без единой строчки кода** — Spring отдаёт там поля из id_token. `roles` — когда появятся роли.
+  - [x] 3.3 Клиенты и выданные авторизации — в БД: миграция `005` (официальные схемы Spring AS + `text`/`timestamptz`, уникальный `client_id`, внешние ключи, индексы по кодам/токенам), `AuthorizationStoreConfiguration` — JDBC-репозитории Spring. Клиенты для разработки — `DevClientRegistration`, регистрируются при запуске **только при `auth.dev-client.enabled=true`** (локально `AUTH_DEV_CLIENT_ENABLED=true` в `.env`, в тестах — тестовые настройки; на сервере выключены). Их **два**: `launcher-dev` (вид `NATIVE`, с refresh-токеном) и `planner-dev` (вид `CONFIDENTIAL`, без него) — лаунчер и планировщик делаются одновременно, и один клиент на двоих означал бы разработку против чужих настроек. Секреты клиентов (когда появятся конфиденциальные клиенты) проверяются бином `PasswordEncoder` — это наш `PepperedPasswordEncoder`.
+  - [x] 3.4 Свои поля в токене и `/userinfo`: `name` при scope `profile`, `email` и `email_verified` при scope `email` (OpenID Connect Core, 5.4) — `authserver/UserClaims`. Подключён в **единственный** разрешённый бин `OAuth2TokenCustomizer<JwtEncodingContext>` (`JwtConfiguration.tokenCustomizer`): второй бин этого типа уронил бы старт с `NoUniqueBeanDefinitionException`, поэтому подпись ES256 и claims живут в одной лямбде. Dev-клиентам добавлен scope `email`. **`/userinfo` заработал без единой строчки кода** — Spring отдаёт там поля из id_token. `roles` — когда появятся роли.
   - [ ] 3.5 Ревью безопасности задачи 3 (проведено 2026-09-30). Находки в порядке исправления:
     - [x] **Лимит 600 запросов в минуту на `/oauth2/token`.** Решение 2026-10-07: значение `TOKEN("token", 600, 1 мин)` в enum `RateLimit`, ветка `POST /oauth2/token` в `RateLimitFilter`, ответ `429` + `Retry-After`. Тест: 601-й запрос с одного IP получает 429, с другого IP проходит.
     - [x] **Строки `oauth2_authorization` не удаляются никогда.** Решено: `SchedulingConfiguration` (`@EnableScheduling`), `ExpiredAuthorizationCleaner` (SQL удаления всех истёкших — `GREATEST(*_expires_at) < ?`) и `ExpiredAuthorizationCleanupJob` (`@Scheduled` с интервалом `auth.authorization-cleanup.interval`, умолчание 1 ч). Блокировка в Redis через `StringRedisTemplate.opsForValue().setIfAbsent(key, v, ttl)` — только одна копия приложения запустит очистку, остальные пропустят. Время через `Clock`. Строки без истекших дат (незавершённый authorize) не удаляются.
@@ -246,7 +252,7 @@ Remote: `https://github.com/Enotik-G/auf-id.git` (репозиторий пер�
 - [ ] 10. `/me` (профиль, пароль, сессии)
 - [ ] 11. Audit log
 - [ ] 12. Gateway / BFF
-- [ ] 13. Контракт для лаунчера (как он проверяет JWT, какие claims получает, где хранит refresh-токен) — раздел 6.1 документа
+- [ ] 13. Контракт для клиентов: лаунчер (как проверяет JWT, какие claims получает, где хранит refresh-токен) — раздел 6.1 документа; планировщик (проверка по JWKS, продление входа без refresh-токена) — раздел 6.2
 - [ ] 14. Тесты безопасности
 
 Testcontainers подключены: тесты с БД делают `@Import(TestcontainersConfiguration.class)` и поднимают свой чистый Postgres 18, локальный `docker compose` для тестов не нужен (но нужен запущенный Docker).

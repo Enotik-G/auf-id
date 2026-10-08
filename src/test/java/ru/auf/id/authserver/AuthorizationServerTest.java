@@ -48,14 +48,16 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * Весь путь «войти через Auth» по OAuth 2.1 + OIDC — так, как его пройдёт планировщик.
- * Клиент — planner-dev, его при запуске заводит в БД DevClientRegistration (только в разработке).
+ * Клиент — launcher-dev (вид NATIVE: с refresh-токеном), его при запуске заводит в БД
+ * DevClientRegistration вместе с planner-dev. Берём именно лаунчер: у него поток полнее,
+ * обновление токена есть только здесь.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
 @Import(TestcontainersConfiguration.class)
 class AuthorizationServerTest {
 
-    private static final String CLIENT_ID = "planner-dev";
+    private static final String CLIENT_ID = DevClientRegistration.LAUNCHER_CLIENT_ID;
     private static final String REDIRECT_URI = "http://127.0.0.1:8090/login/oauth2/code/auth";
 
     private static final String EMAIL = "ivan@mail.ru";
@@ -304,7 +306,7 @@ class AuthorizationServerTest {
      * Защищает здесь не он, а PKCE: см. {@code ClientKind.NATIVE}.
      */
     private static RequestPostProcessor clientSecret() {
-        return httpBasic(CLIENT_ID, DevClientRegistration.CLIENT_SECRET);
+        return httpBasic(CLIENT_ID, DevClientRegistration.LAUNCHER_CLIENT_SECRET);
     }
 
     private String refresh(String refreshToken) throws Exception {
@@ -330,13 +332,103 @@ class AuthorizationServerTest {
     }
 
     @Test
-    void devClientIsRegisteredInDatabaseOnlyOnce() {
+    void devClientsAreRegisteredInDatabaseOnlyOnce() {
         devClientRegistration.run(null);
         devClientRegistration.run(null);
 
-        Integer clients = jdbc.queryForObject(
-                "SELECT count(*) FROM oauth2_registered_client WHERE client_id = ?", Integer.class, CLIENT_ID);
-        assertThat(clients).isEqualTo(1);
+        // Оба dev-клиента: лаунчер и планировщик делаются одновременно, и каждому нужен свой.
+        assertThat(countOf(DevClientRegistration.LAUNCHER_CLIENT_ID)).isEqualTo(1);
+        assertThat(countOf(DevClientRegistration.PLANNER_CLIENT_ID)).isEqualTo(1);
+    }
+
+    // ─────────────────── продление входа для браузерного клиента (планировщик) ───────────────────
+
+    /**
+     * Планировщик живёт в браузере: refresh-токена у него нет и секрета тоже — украл бы XSS.
+     */
+    @Test
+    void plannerDevClientIsPublicAndHasNoRefreshTokenGrant() {
+        var client = jdbc.queryForMap(
+                "SELECT authorization_grant_types, client_authentication_methods, client_secret"
+                        + " FROM oauth2_registered_client WHERE client_id = ?",
+                DevClientRegistration.PLANNER_CLIENT_ID);
+
+        assertThat((String) client.get("authorization_grant_types"))
+                .contains("authorization_code").doesNotContain("refresh_token");
+        assertThat((String) client.get("client_authentication_methods")).isEqualTo("none");
+        assertThat(client.get("client_secret")).isNull();
+    }
+
+    /**
+     * Так планировщик продлевает вход: уже вошедший человек заходит на /oauth2/authorize с
+     * {@code prompt=none} и получает новый код <b>без формы входа</b>. Это замена refresh-токену
+     * для браузерного приложения, поэтому путь закреплён тестом.
+     */
+    @Test
+    void browserClientRenewsLoginSilentlyWithPromptNone() throws Exception {
+        MockHttpSession session = logIn();
+
+        var params = plannerAuthorizeParams();
+        params.add("prompt", "none");
+
+        MvcResult result = mockMvc.perform(get("/oauth2/authorize").queryParams(params).session(session))
+                .andExpect(status().is3xxRedirection())
+                .andReturn();
+
+        var redirect = UriComponentsBuilder.fromUriString(result.getResponse().getRedirectedUrl()).build();
+        assertThat(redirect.toUriString()).startsWith(DevClientRegistration.PLANNER_REDIRECT_URI);
+        assertThat(redirect.getQueryParams().getFirst("code")).isNotBlank();
+        assertThat(redirect.getQueryParams().getFirst("error")).isNull();
+    }
+
+    /**
+     * Не вошедшему {@code prompt=none} отдаёт ошибку {@code login_required}, а не форму входа:
+     * вкладка по этому признаку понимает, что человека надо отправить входить по-настоящему.
+     */
+    @Test
+    void promptNoneWithoutSessionReturnsLoginRequired() throws Exception {
+        var params = plannerAuthorizeParams();
+        params.add("prompt", "none");
+
+        MvcResult result = mockMvc.perform(get("/oauth2/authorize").queryParams(params))
+                .andExpect(status().is3xxRedirection())
+                .andReturn();
+
+        var redirect = UriComponentsBuilder.fromUriString(result.getResponse().getRedirectedUrl()).build();
+        assertThat(redirect.toUriString()).startsWith(DevClientRegistration.PLANNER_REDIRECT_URI);
+        assertThat(redirect.getQueryParams().getFirst("error")).isEqualTo("login_required");
+    }
+
+    /**
+     * Продлевать вход скрытым iframe нельзя: ответ /oauth2/authorize запрещает встраивание в рамку.
+     *
+     * <p>Это умолчание Spring Security, и менять его мы не собираемся — защита от clickjacking на
+     * странице входа. Но для браузерного клиента это значит, что молчаливое продление делается
+     * <b>переходом страницы</b> (или всплывающим окном), а не невидимым iframe, как часто пишут в
+     * статьях про SPA. Тест стоит здесь, чтобы это ограничение нашли до того, как напишут iframe.
+     */
+    @Test
+    void authorizeEndpointForbidsBeingEmbeddedInAnIframe() throws Exception {
+        mockMvc.perform(get("/oauth2/authorize").queryParams(plannerAuthorizeParams()).session(logIn()))
+                .andExpect(header().string("X-Frame-Options", "DENY"));
+    }
+
+    private org.springframework.util.LinkedMultiValueMap<String, String> plannerAuthorizeParams()
+            throws Exception {
+        var params = new org.springframework.util.LinkedMultiValueMap<String, String>();
+        params.add("response_type", "code");
+        params.add("client_id", DevClientRegistration.PLANNER_CLIENT_ID);
+        params.add("scope", "openid profile email");
+        params.add("redirect_uri", DevClientRegistration.PLANNER_REDIRECT_URI);
+        params.add("state", "xyz");
+        params.add("code_challenge", codeChallenge(codeVerifier));
+        params.add("code_challenge_method", "S256");
+        return params;
+    }
+
+    private Integer countOf(String clientId) {
+        return jdbc.queryForObject(
+                "SELECT count(*) FROM oauth2_registered_client WHERE client_id = ?", Integer.class, clientId);
     }
 
     @Test
