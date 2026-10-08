@@ -25,6 +25,7 @@ import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import java.nio.charset.StandardCharsets;
@@ -36,6 +37,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestBuilders.formLogin;
 import static org.springframework.security.test.web.servlet.response.SecurityMockMvcResultMatchers.authenticated;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -145,6 +147,7 @@ class AuthorizationServerTest {
         String code = authorize();
 
         MvcResult tokenResponse = mockMvc.perform(post("/oauth2/token")
+                        .with(clientSecret())
                         .param("grant_type", "authorization_code")
                         .param("code", code)
                         .param("redirect_uri", REDIRECT_URI)
@@ -218,6 +221,7 @@ class AuthorizationServerTest {
         exchangeCodeForTokens(code);
 
         mockMvc.perform(post("/oauth2/token")
+                        .with(clientSecret())
                         .param("grant_type", "authorization_code")
                         .param("code", code)
                         .param("redirect_uri", REDIRECT_URI)
@@ -225,6 +229,91 @@ class AuthorizationServerTest {
                         .param("code_verifier", codeVerifier))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").value("invalid_grant"));
+    }
+
+    // ─────────────────────────── refresh-токены (шаг 16) ───────────────────────────
+
+    /**
+     * Лаунчер получает refresh-токен вместе с access-токеном и меняет его на новый access-токен
+     * без участия человека. Без этого вход живёт 10 минут, и лаунчер каждые 10 минут открывал бы
+     * браузер заново.
+     */
+    @Test
+    void refreshTokenBuysANewAccessTokenWithoutTheUser() throws Exception {
+        String refreshToken = JsonPath.read(exchangeCodeForTokens(authorize()), "$.refresh_token");
+
+        String refreshed = refresh(refreshToken);
+
+        Jwt accessToken = jwtDecoder.decode(JsonPath.read(refreshed, "$.access_token"));
+        assertThat(accessToken.getSubject()).isEqualTo(user.getId().toString());
+        assertThat(Duration.between(accessToken.getIssuedAt(), accessToken.getExpiresAt()))
+                .isEqualTo(Duration.ofMinutes(10));
+    }
+
+    /**
+     * Ротация: обновление выдаёт <b>новый</b> refresh-токен, прежний перестаёт работать.
+     *
+     * <p>У Spring по умолчанию наоборот ({@code reuseRefreshTokens = true}) — возвращается тот же
+     * токен. Тогда украденный токен работал бы все 30 дней, и кража ничем бы себя не выдала.
+     */
+    @Test
+    void refreshTokenIsRotatedAndTheOldOneStopsWorking() throws Exception {
+        String firstRefreshToken = JsonPath.read(exchangeCodeForTokens(authorize()), "$.refresh_token");
+
+        String secondRefreshToken = JsonPath.read(refresh(firstRefreshToken), "$.refresh_token");
+        assertThat(secondRefreshToken).isNotEqualTo(firstRefreshToken);
+
+        mockMvc.perform(post("/oauth2/token")
+                        .with(clientSecret())
+                        .param("grant_type", "refresh_token")
+                        .param("refresh_token", firstRefreshToken))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("invalid_grant"));
+    }
+
+    /** Срок refresh-токена отсчитывается заново от каждого обновления — скользящее окно 30 дней. */
+    @Test
+    void refreshTokenIsStoredWithAThirtyDayLifetime() throws Exception {
+        exchangeCodeForTokens(authorize());
+
+        var row = jdbc.queryForMap(
+                "SELECT refresh_token_issued_at, refresh_token_expires_at FROM oauth2_authorization"
+                        + " WHERE principal_name = ?",
+                user.getId().toString());
+
+        Duration lifetime = Duration.between(
+                ((java.sql.Timestamp) row.get("refresh_token_issued_at")).toInstant(),
+                ((java.sql.Timestamp) row.get("refresh_token_expires_at")).toInstant());
+        assertThat(lifetime).isEqualTo(Duration.ofDays(30));
+    }
+
+    /** В БД refresh-токен тоже лежит хешем (шаг 12), а не открытым текстом. */
+    @Test
+    void refreshTokenIsStoredOnlyAsHash() throws Exception {
+        String refreshToken = JsonPath.read(exchangeCodeForTokens(authorize()), "$.refresh_token");
+
+        String stored = jdbc.queryForObject(
+                "SELECT refresh_token_value FROM oauth2_authorization WHERE principal_name = ?",
+                String.class, user.getId().toString());
+
+        assertThat(stored).isEqualTo(HashedTokenAuthorizationService.hash(refreshToken));
+    }
+
+    /**
+     * Секрет клиента в заголовке Basic — так его предъявляет настольное приложение.
+     * Защищает здесь не он, а PKCE: см. {@code ClientKind.NATIVE}.
+     */
+    private static RequestPostProcessor clientSecret() {
+        return httpBasic(CLIENT_ID, DevClientRegistration.CLIENT_SECRET);
+    }
+
+    private String refresh(String refreshToken) throws Exception {
+        return mockMvc.perform(post("/oauth2/token")
+                        .with(clientSecret())
+                        .param("grant_type", "refresh_token")
+                        .param("refresh_token", refreshToken))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
     }
 
     @Test
@@ -255,6 +344,7 @@ class AuthorizationServerTest {
         String code = authorize();
 
         mockMvc.perform(post("/oauth2/token")
+                        .with(clientSecret())
                         .param("grant_type", "authorization_code")
                         .param("code", code)
                         .param("redirect_uri", REDIRECT_URI)
@@ -385,6 +475,7 @@ class AuthorizationServerTest {
     /** Шаг 2: планировщик меняет код на токены. Возвращает JSON-ответ сервера. */
     private String exchangeCodeForTokens(String code) throws Exception {
         return mockMvc.perform(post("/oauth2/token")
+                        .with(clientSecret())
                         .param("grant_type", "authorization_code")
                         .param("code", code)
                         .param("redirect_uri", REDIRECT_URI)

@@ -30,8 +30,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @Import(SecurityConfiguration.class)
 class AdminClientControllerTest {
 
-    private static final String PUBLIC_BODY = """
-            {"clientId":"planner","name":"Планировщик","kind":"PUBLIC",
+    private static final String NATIVE_BODY = """
+            {"clientId":"planner","name":"Планировщик","kind":"NATIVE",
              "redirectUris":["https://planner.college.ru/callback"]}""";
 
     @Autowired
@@ -63,12 +63,12 @@ class AdminClientControllerTest {
         when(clients.register(any())).thenReturn(new ClientCredentials("planner", null));
 
         mockMvc.perform(post("/api/v1/admin/clients").with(csrf())
-                        .contentType(MediaType.APPLICATION_JSON).content(PUBLIC_BODY))
+                        .contentType(MediaType.APPLICATION_JSON).content(NATIVE_BODY))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.clientId").value("planner"))
                 .andExpect(jsonPath("$.secret").doesNotExist());
 
-        verify(clients).register(new ClientSpec("planner", "Планировщик", ClientKind.PUBLIC,
+        verify(clients).register(new ClientSpec("planner", "Планировщик", ClientKind.NATIVE,
                 Set.of("https://planner.college.ru/callback"), Set.of(), Set.of()));
     }
 
@@ -93,7 +93,7 @@ class AdminClientControllerTest {
                 .thenThrow(new InvalidClientSpecException("Нужен хотя бы один адрес возврата"));
 
         mockMvc.perform(post("/api/v1/admin/clients").with(csrf())
-                        .contentType(MediaType.APPLICATION_JSON).content(PUBLIC_BODY))
+                        .contentType(MediaType.APPLICATION_JSON).content(NATIVE_BODY))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.detail").value("Нужен хотя бы один адрес возврата"));
     }
@@ -104,7 +104,7 @@ class AdminClientControllerTest {
         when(clients.register(any())).thenThrow(new ClientAlreadyExistsException("planner"));
 
         mockMvc.perform(post("/api/v1/admin/clients").with(csrf())
-                        .contentType(MediaType.APPLICATION_JSON).content(PUBLIC_BODY))
+                        .contentType(MediaType.APPLICATION_JSON).content(NATIVE_BODY))
                 .andExpect(status().isConflict());
     }
 
@@ -112,14 +112,14 @@ class AdminClientControllerTest {
     @WithMockUser(roles = "ADMIN")
     void listsClients() throws Exception {
         when(clients.list()).thenReturn(List.of(new ClientSummary(
-                "planner", "Планировщик", ClientKind.PUBLIC,
+                "planner", "Планировщик", ClientKind.NATIVE,
                 Set.of("https://planner.college.ru/callback"),
                 Set.of("openid"), Instant.parse("2026-10-07T10:00:00Z"))));
 
         mockMvc.perform(get("/api/v1/admin/clients"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].clientId").value("planner"))
-                .andExpect(jsonPath("$[0].kind").value("PUBLIC"));
+                .andExpect(jsonPath("$[0].kind").value("NATIVE"));
     }
 
     @Test

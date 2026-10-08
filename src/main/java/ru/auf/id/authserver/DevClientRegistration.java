@@ -5,6 +5,7 @@ import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
 import org.springframework.security.oauth2.core.oidc.OidcScopes;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClient;
@@ -32,8 +33,17 @@ public class DevClientRegistration implements ApplicationRunner {
     static final String REDIRECT_URI = "http://127.0.0.1:8090/login/oauth2/code/auth";
     /** Access token живёт 10 минут: сервисы проверяют его сами, без запроса в Auth (решение архитектуры). */
     static final Duration ACCESS_TOKEN_LIFETIME = Duration.ofMinutes(10);
+    /** Как у настоящего настольного клиента: 30 дней от последнего обновления (решение 2026-10-08). */
+    static final Duration REFRESH_TOKEN_LIFETIME = Duration.ofDays(30);
+    /**
+     * Секрет dev-клиента. Лежит в коде открыто намеренно: это клиент <b>только для разработки</b>
+     * (регистрируется при {@code auth.dev-client.enabled=true}, на сервере выключен), и настоящий
+     * лаунчер свой секрет получит через админку. Прятать его негде и незачем.
+     */
+    static final String CLIENT_SECRET = "planner-dev-secret";
 
     private final RegisteredClientRepository clients;
+    private final PasswordEncoder passwordEncoder;
 
     @Override
     public void run(ApplicationArguments args) {
@@ -43,9 +53,13 @@ public class DevClientRegistration implements ApplicationRunner {
         clients.save(RegisteredClient.withId(UUID.randomUUID().toString())
                 .clientId(CLIENT_ID)
                 .clientName("Планировщик (разработка)")
-                // Публичный клиент (без секрета) — как SPA или мобильное приложение; защищён PKCE.
-                .clientAuthenticationMethod(ClientAuthenticationMethod.NONE)
+                // Вид NATIVE, как лаунчер: секрет есть, но защищает PKCE — см. ClientKind.NATIVE.
+                // Без секрета Spring не даёт обменять refresh-токен.
+                .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
+                .clientSecret(passwordEncoder.encode(CLIENT_SECRET))
                 .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
+                // Обновление access-токена без участия человека — то, без чего лаунчер нежизнеспособен.
+                .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
                 .redirectUri(REDIRECT_URI)
                 .scope(OidcScopes.OPENID)
                 // profile -> claim name, email -> claims email и email_verified (OpenID Connect Core, 5.4)
@@ -58,6 +72,10 @@ public class DevClientRegistration implements ApplicationRunner {
                         .build())
                 .tokenSettings(TokenSettings.builder()
                         .accessTokenTimeToLive(ACCESS_TOKEN_LIFETIME)
+                        // Ротация: каждый обмен выдаёт новый refresh-токен, старый перестаёт работать.
+                        // У Spring по умолчанию наоборот (reuseRefreshTokens = true), а срок — 60 минут.
+                        .reuseRefreshTokens(false)
+                        .refreshTokenTimeToLive(REFRESH_TOKEN_LIFETIME)
                         .build())
                 .build());
     }

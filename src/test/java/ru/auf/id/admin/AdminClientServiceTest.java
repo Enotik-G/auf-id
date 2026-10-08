@@ -14,6 +14,7 @@ import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClient;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClientRepository;
 
+import java.time.Duration;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -33,25 +34,98 @@ class AdminClientServiceTest {
     @Autowired
     private PasswordEncoder passwordEncoder;
 
-    // ─────────────────────────── публичный клиент ───────────────────────────
+    // ─────────────────── настольный клиент (NATIVE) и вкладка (BROWSER) ───────────────────
 
+    /**
+     * Настольному приложению секрет выдаётся — без него Spring не даёт обменять refresh-токен
+     * (см. {@code ClientKind.NATIVE}). Настоящая защита здесь — PKCE, и он обязателен.
+     */
     @Test
-    void registersPublicClientWithoutSecretAndWithPkce() {
-        ClientCredentials credentials = service.register(publicSpec("planner"));
+    void registersNativeClientWithSecretAndPkce() {
+        ClientCredentials credentials = service.register(nativeSpec("planner"));
 
-        assertThat(credentials.secret()).isNull();
+        assertThat(credentials.secret()).isNotBlank();
         RegisteredClient stored = clients.findByClientId("planner");
-        assertThat(stored.getClientAuthenticationMethods()).containsExactly(ClientAuthenticationMethod.NONE);
-        assertThat(stored.getAuthorizationGrantTypes()).containsExactly(AuthorizationGrantType.AUTHORIZATION_CODE);
+        assertThat(stored.getClientAuthenticationMethods())
+                .containsExactly(ClientAuthenticationMethod.CLIENT_SECRET_BASIC);
+        // В базе — только хеш секрета.
+        assertThat(stored.getClientSecret()).isNotEqualTo(credentials.secret());
+        assertThat(passwordEncoder.matches(credentials.secret(), stored.getClientSecret())).isTrue();
         assertThat(stored.getClientSettings().isRequireProofKey()).isTrue();
         assertThat(stored.getRedirectUris()).containsExactly("https://planner.college.ru/callback");
         assertThat(stored.getScopes()).containsExactlyInAnyOrder("openid", "profile", "email");
     }
 
+    /** У вкладки секрета нет: спрятать его в браузере негде. */
+    @Test
+    void browserClientGetsNoSecret() {
+        ClientCredentials credentials = service.register(new ClientSpec("spa", "Вкладка",
+                ClientKind.BROWSER, Set.of("https://spa.college.ru/callback"), Set.of(), Set.of()));
+
+        assertThat(credentials.secret()).isNull();
+        assertThat(clients.findByClientId("spa").getClientAuthenticationMethods())
+                .containsExactly(ClientAuthenticationMethod.NONE);
+    }
+
+    /**
+     * Настольному приложению refresh-токен выдаётся: иначе через 10 минут лаунчер обязан снова
+     * вести человека в браузер.
+     */
+    @Test
+    void nativeClientGetsRotatingRefreshTokenForThirtyDays() {
+        service.register(nativeSpec("launcher"));
+
+        RegisteredClient stored = clients.findByClientId("launcher");
+        assertThat(stored.getAuthorizationGrantTypes()).containsExactlyInAnyOrder(
+                AuthorizationGrantType.AUTHORIZATION_CODE, AuthorizationGrantType.REFRESH_TOKEN);
+        assertThat(stored.getTokenSettings().getRefreshTokenTimeToLive()).isEqualTo(Duration.ofDays(30));
+        // Ротация: у Spring по умолчанию reuseRefreshTokens = true, то есть на обновление вернулся бы
+        // тот же токен и кража ничем бы себя не выдала.
+        assertThat(stored.getTokenSettings().isReuseRefreshTokens()).isFalse();
+    }
+
+    /**
+     * Браузерной вкладке refresh-токен не выдаётся: спрятать его от XSS негде, а живёт он 30 дней.
+     * Вкладка продлевает вход молчаливым заходом на /oauth2/authorize.
+     */
+    @Test
+    void browserClientGetsNoRefreshToken() {
+        service.register(new ClientSpec("spa", "Вкладка", ClientKind.BROWSER,
+                Set.of("https://spa.college.ru/callback"), Set.of(), Set.of()));
+
+        RegisteredClient stored = clients.findByClientId("spa");
+        assertThat(stored.getClientAuthenticationMethods()).containsExactly(ClientAuthenticationMethod.NONE);
+        assertThat(stored.getAuthorizationGrantTypes()).containsExactly(AuthorizationGrantType.AUTHORIZATION_CODE);
+    }
+
+    /** Оба публичных вида различимы в списке — иначе администратор не увидит, кому дали refresh-токен. */
+    @Test
+    void nativeAndBrowserAreToldApartInTheList() {
+        service.register(nativeSpec("launcher"));
+        service.register(new ClientSpec("spa", "Вкладка", ClientKind.BROWSER,
+                Set.of("https://spa.college.ru/callback"), Set.of(), Set.of()));
+
+        assertThat(service.list())
+                .extracting(ClientSummary::clientId, ClientSummary::kind)
+                .contains(
+                        org.assertj.core.groups.Tuple.tuple("launcher", ClientKind.NATIVE),
+                        org.assertj.core.groups.Tuple.tuple("spa", ClientKind.BROWSER));
+    }
+
+    /** Возврат на свободный локальный порт — то, как входит настольное приложение (RFC 8252). */
+    @Test
+    void acceptsLoopbackRedirectUriOfNativeClient() {
+        service.register(new ClientSpec("launcher", "Лаунчер", ClientKind.NATIVE,
+                Set.of("http://127.0.0.1:8090/callback"), Set.of(), Set.of()));
+
+        assertThat(clients.findByClientId("launcher").getRedirectUris())
+                .containsExactly("http://127.0.0.1:8090/callback");
+    }
+
     @Test
     void refusesPublicClientWithoutRedirectUri() {
         assertThatThrownBy(() -> service.register(new ClientSpec(
-                "planner", "Планировщик", ClientKind.PUBLIC, Set.of(), Set.of(), Set.of())))
+                "planner", "Планировщик", ClientKind.NATIVE, Set.of(), Set.of(), Set.of())))
                 .isInstanceOf(InvalidClientSpecException.class)
                 .hasMessageContaining("адрес возврата");
     }
@@ -111,17 +185,17 @@ class AdminClientServiceTest {
 
     @Test
     void refusesDuplicateClientId() {
-        service.register(publicSpec("planner"));
+        service.register(nativeSpec("planner"));
 
-        assertThatThrownBy(() -> service.register(publicSpec("planner")))
+        assertThatThrownBy(() -> service.register(nativeSpec("planner")))
                 .isInstanceOf(ClientAlreadyExistsException.class);
     }
 
     @Test
     void refusesMalformedClientId() {
-        assertThatThrownBy(() -> service.register(publicSpec("Планировщик")))
+        assertThatThrownBy(() -> service.register(nativeSpec("Планировщик")))
                 .isInstanceOf(InvalidClientSpecException.class);
-        assertThatThrownBy(() -> service.register(publicSpec("a")))
+        assertThatThrownBy(() -> service.register(nativeSpec("a")))
                 .isInstanceOf(InvalidClientSpecException.class);
     }
 
@@ -129,19 +203,19 @@ class AdminClientServiceTest {
     @Test
     void refusesRedirectUriWithFragmentOrRelative() {
         assertThatThrownBy(() -> service.register(new ClientSpec(
-                "planner", "Планировщик", ClientKind.PUBLIC,
+                "planner", "Планировщик", ClientKind.NATIVE,
                 Set.of("https://planner.college.ru/callback#token"), Set.of(), Set.of())))
                 .isInstanceOf(InvalidClientSpecException.class);
 
         assertThatThrownBy(() -> service.register(new ClientSpec(
-                "planner", "Планировщик", ClientKind.PUBLIC, Set.of("/callback"), Set.of(), Set.of())))
+                "planner", "Планировщик", ClientKind.NATIVE, Set.of("/callback"), Set.of(), Set.of())))
                 .isInstanceOf(InvalidClientSpecException.class);
     }
 
     @Test
     void refusesMalformedScope() {
         assertThatThrownBy(() -> service.register(new ClientSpec(
-                "planner", "Планировщик", ClientKind.PUBLIC,
+                "planner", "Планировщик", ClientKind.NATIVE,
                 Set.of("https://planner.college.ru/callback"), Set.of(), Set.of("Права Админа"))))
                 .isInstanceOf(InvalidClientSpecException.class);
     }
@@ -162,17 +236,33 @@ class AdminClientServiceTest {
         assertThat(passwordEncoder.matches(first.secret(), storedHash)).isFalse();
     }
 
+    /** Секрета нет только у вкладки — ей и отказываем. */
     @Test
-    void refusesToRotateSecretOfPublicClient() {
-        service.register(publicSpec("planner"));
+    void refusesToRotateSecretOfBrowserClient() {
+        service.register(new ClientSpec("spa", "Вкладка", ClientKind.BROWSER,
+                Set.of("https://spa.college.ru/callback"), Set.of(), Set.of()));
 
-        assertThatThrownBy(() -> service.rotateSecret("planner"))
-                .isInstanceOf(InvalidClientSpecException.class);
+        assertThatThrownBy(() -> service.rotateSecret("spa"))
+                .isInstanceOf(InvalidClientSpecException.class)
+                .hasMessageContaining("BROWSER");
+    }
+
+    /** Настольному приложению секрет выдан, значит его можно и заменить. */
+    @Test
+    void rotatesSecretOfNativeClient() {
+        String firstSecret = service.register(nativeSpec("launcher")).secret();
+
+        String secondSecret = service.rotateSecret("launcher").secret();
+
+        assertThat(secondSecret).isNotBlank().isNotEqualTo(firstSecret);
+        RegisteredClient stored = clients.findByClientId("launcher");
+        assertThat(passwordEncoder.matches(secondSecret, stored.getClientSecret())).isTrue();
+        assertThat(passwordEncoder.matches(firstSecret, stored.getClientSecret())).isFalse();
     }
 
     @Test
     void unregistersClient() {
-        service.register(publicSpec("planner"));
+        service.register(nativeSpec("planner"));
 
         service.unregister("planner");
 
@@ -186,11 +276,24 @@ class AdminClientServiceTest {
         assertThatThrownBy(() -> service.unregister("nobody")).isInstanceOf(ClientNotFoundException.class);
     }
 
+    @Test
+    void confidentialAndServiceClientsGetNoRefreshToken() {
+        service.register(new ClientSpec("board", "Доска", ClientKind.CONFIDENTIAL,
+                Set.of("https://board.college.ru/callback"), Set.of(), Set.of()));
+        service.register(new ClientSpec("mc-server", "Minecraft", ClientKind.SERVICE,
+                Set.of(), Set.of(), Set.of("users.read")));
+
+        assertThat(clients.findByClientId("board").getAuthorizationGrantTypes())
+                .doesNotContain(AuthorizationGrantType.REFRESH_TOKEN);
+        assertThat(clients.findByClientId("mc-server").getAuthorizationGrantTypes())
+                .doesNotContain(AuthorizationGrantType.REFRESH_TOKEN);
+    }
+
     // ─────────────────────────── список ───────────────────────────
 
     @Test
     void listsClientsWithTheirKind() {
-        service.register(publicSpec("planner"));
+        service.register(nativeSpec("planner"));
         service.register(new ClientSpec("board", "Доска", ClientKind.CONFIDENTIAL,
                 Set.of("https://board.college.ru/callback"), Set.of(), Set.of()));
         service.register(new ClientSpec("mc-server", "Minecraft", ClientKind.SERVICE,
@@ -199,13 +302,13 @@ class AdminClientServiceTest {
         assertThat(service.list())
                 .extracting(ClientSummary::clientId, ClientSummary::kind)
                 .contains(
-                        org.assertj.core.groups.Tuple.tuple("planner", ClientKind.PUBLIC),
+                        org.assertj.core.groups.Tuple.tuple("planner", ClientKind.NATIVE),
                         org.assertj.core.groups.Tuple.tuple("board", ClientKind.CONFIDENTIAL),
                         org.assertj.core.groups.Tuple.tuple("mc-server", ClientKind.SERVICE));
     }
 
-    private static ClientSpec publicSpec(String clientId) {
-        return new ClientSpec(clientId, "Планировщик", ClientKind.PUBLIC,
+    private static ClientSpec nativeSpec(String clientId) {
+        return new ClientSpec(clientId, "Планировщик", ClientKind.NATIVE,
                 Set.of("https://planner.college.ru/callback"), Set.of(), Set.of());
     }
 }
