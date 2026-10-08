@@ -180,8 +180,11 @@ class AuthorizationServerTest {
     }
 
     /**
-     * Утечка дампа БД не должна выдавать живые коды и токены (и ФИО с почтой из id_token):
-     * в таблице лежат только их хеши SHA-256.
+     * Утечка дампа БД не должна выдавать живые коды и токены: в колонках значений лежат только
+     * их хеши SHA-256, предъявить такой «токен» нельзя.
+     *
+     * <p>ФИО и почта этим <b>не закрыты</b>: они остаются в {@code *_metadata} —
+     * см. {@link HashedTokenAuthorizationService}.
      */
     @Test
     void codeAndTokensAreStoredOnlyAsHashes() throws Exception {
