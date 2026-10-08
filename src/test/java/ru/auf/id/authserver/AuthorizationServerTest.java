@@ -48,14 +48,16 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * Весь путь «войти через Auth» по OAuth 2.1 + OIDC — так, как его пройдёт планировщик.
- * Клиент — planner-dev, его при запуске заводит в БД DevClientRegistration (только в разработке).
+ * Клиент — launcher-dev (вид NATIVE: с refresh-токеном), его при запуске заводит в БД
+ * DevClientRegistration вместе с planner-dev. Берём именно лаунчер: у него поток полнее,
+ * обновление токена есть только здесь.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
 @Import(TestcontainersConfiguration.class)
 class AuthorizationServerTest {
 
-    private static final String CLIENT_ID = "planner-dev";
+    private static final String CLIENT_ID = DevClientRegistration.LAUNCHER_CLIENT_ID;
     private static final String REDIRECT_URI = "http://127.0.0.1:8090/login/oauth2/code/auth";
 
     private static final String EMAIL = "ivan@mail.ru";
@@ -304,7 +306,7 @@ class AuthorizationServerTest {
      * Защищает здесь не он, а PKCE: см. {@code ClientKind.NATIVE}.
      */
     private static RequestPostProcessor clientSecret() {
-        return httpBasic(CLIENT_ID, DevClientRegistration.CLIENT_SECRET);
+        return httpBasic(CLIENT_ID, DevClientRegistration.LAUNCHER_CLIENT_SECRET);
     }
 
     private String refresh(String refreshToken) throws Exception {
@@ -330,13 +332,28 @@ class AuthorizationServerTest {
     }
 
     @Test
-    void devClientIsRegisteredInDatabaseOnlyOnce() {
+    void devClientsAreRegisteredInDatabaseOnlyOnce() {
         devClientRegistration.run(null);
         devClientRegistration.run(null);
 
-        Integer clients = jdbc.queryForObject(
-                "SELECT count(*) FROM oauth2_registered_client WHERE client_id = ?", Integer.class, CLIENT_ID);
-        assertThat(clients).isEqualTo(1);
+        // Оба dev-клиента: лаунчер и планировщик делаются одновременно, и каждому нужен свой.
+        assertThat(countOf(DevClientRegistration.LAUNCHER_CLIENT_ID)).isEqualTo(1);
+        assertThat(countOf(DevClientRegistration.PLANNER_CLIENT_ID)).isEqualTo(1);
+    }
+
+    /** Планировщик — серверное приложение: refresh-токен ему не нужен, сессию он держит сам. */
+    @Test
+    void plannerDevClientHasNoRefreshTokenGrant() {
+        var grantTypes = jdbc.queryForObject(
+                "SELECT authorization_grant_types FROM oauth2_registered_client WHERE client_id = ?",
+                String.class, DevClientRegistration.PLANNER_CLIENT_ID);
+
+        assertThat(grantTypes).contains("authorization_code").doesNotContain("refresh_token");
+    }
+
+    private Integer countOf(String clientId) {
+        return jdbc.queryForObject(
+                "SELECT count(*) FROM oauth2_registered_client WHERE client_id = ?", Integer.class, clientId);
     }
 
     @Test

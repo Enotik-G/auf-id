@@ -177,7 +177,7 @@ docker compose exec redis redis-cli --scan --pattern 'rate:*'           | xargs 
 | `REDIS_HOST` / `REDIS_PORT` | `localhost` / `6379` | Redis. Пароль — `SPRING_DATA_REDIS_PASSWORD`. |
 | `SESSION_COOKIE_SECURE` | `false` | Cookie сессии только по HTTPS. **На сервере — `true`.** |
 | `BOOTSTRAP_ADMIN_EMAILS` | пусто | Почты первых администраторов через запятую. Роль `ADMIN` выдаётся им при входе. Пусто — механизм отключён. |
-| `AUTH_DEV_CLIENT_ENABLED` | `false` | Регистрировать клиента `planner-dev` для локальной разработки. **На сервере — не включать.** |
+| `AUTH_DEV_CLIENT_ENABLED` | `false` | Регистрировать клиентов `launcher-dev` и `planner-dev` для локальной разработки. **На сервере — не включать.** |
 | `SPRINGDOC_API_DOCS_ENABLED`, `SPRINGDOC_SWAGGER_UI_ENABLED` | `true` | Swagger. Можно выключить на сервере. |
 
 Любую настройку Spring Boot можно задать переменной окружения: точки → `_`, всё заглавными
@@ -297,18 +297,31 @@ BOOTSTRAP_ADMIN_EMAILS=director@college.ru,boss@college.ru
 Подойдёт любая стандартная библиотека OIDC-клиента: Spring Security OAuth2 Client, Authlib (Python),
 `openid-client` (Node.js) и т.д. Настраивается одной строкой — адресом issuer.
 
-### Клиент для локальной разработки
+### Клиенты для локальной разработки
 
-При `AUTH_DEV_CLIENT_ENABLED=true` зарегистрирован клиент:
+При `AUTH_DEV_CLIENT_ENABLED=true` регистрируются **два** клиента — по одному на каждый из
+сервисов, которые делаются сейчас. Они устроены по-разному, поэтому и клиента два: разрабатывать
+планировщик против настроек лаунчера значит обнаружить расхождение уже на сервере.
 
-| Параметр | Значение |
-|---|---|
-| issuer | `http://localhost:8080` |
-| `client_id` | `planner-dev` |
-| секрет | нет (публичный клиент, защищён PKCE) |
-| `redirect_uri` | `http://127.0.0.1:8090/login/oauth2/code/auth` — **ровно этот**, и именно `127.0.0.1`, не `localhost` |
-| scopes | `openid`, `profile` |
-| экран согласия | нет (свой сервис) |
+| Параметр | Лаунчер | Планировщик |
+|---|---|---|
+| `client_id` | `launcher-dev` | `planner-dev` |
+| вид | `NATIVE` (настольное приложение) | `CONFIDENTIAL` (серверное) |
+| секрет | `launcher-dev-secret` | `planner-dev-secret` |
+| `redirect_uri` | `http://127.0.0.1:8090/login/oauth2/code/auth` | `http://127.0.0.1:8000/auth/callback` |
+| refresh-токен | да, 30 дней с ротацией | нет |
+
+Общее у обоих: issuer `http://localhost:8080`, scopes `openid`, `profile`, `email`, PKCE
+обязателен, экрана согласия нет (свои сервисы). `redirect_uri` сверяется **ровно**, и именно
+`127.0.0.1`, не `localhost`.
+
+> Секреты лежат в коде открыто намеренно: эти клиенты только для разработки, на сервере
+> `AUTH_DEV_CLIENT_ENABLED` не включают, а настоящие клиенты получают секреты через админку.
+
+> **Планировщику клиент нужен не всегда.** Если python-микросервис только проверяет JWT, а вход
+> делает фронтенд или шлюз перед ним, — он не клиент, а **сервер ресурсов**: ему достаточно
+> прочитать `jwks_uri` из discovery и сверять подпись, `iss`, `aud` и `exp`. Регистрировать его
+> тогда не нужно вовсе. Клиент `planner-dev` — для случая, когда вход делает сам планировщик.
 
 > Регистрация клиентов для сервера (со своими `client_id` и адресами возврата) пока делается вручную
 > разработчиками Auth — появится в админке (задача 9). Нужен клиент — напишите в команду Auth.
@@ -349,15 +362,23 @@ CHALLENGE=$(printf %s "$VERIFIER" | openssl dgst -sha256 -binary | openssl base6
 
 # 2. Открыть в браузере (войти, после входа браузер уйдёт на 127.0.0.1:8090 — страница не откроется,
 #    это нормально: скопируйте из адресной строки значение параметра code)
-echo "http://localhost:8080/oauth2/authorize?response_type=code&client_id=planner-dev&scope=openid%20profile&redirect_uri=http://127.0.0.1:8090/login/oauth2/code/auth&state=xyz&code_challenge=$CHALLENGE&code_challenge_method=S256"
+echo "http://localhost:8080/oauth2/authorize?response_type=code&client_id=launcher-dev&scope=openid%20profile&redirect_uri=http://127.0.0.1:8090/login/oauth2/code/auth&state=xyz&code_challenge=$CHALLENGE&code_challenge_method=S256"
 
 # 3. Обменять код на токены (код одноразовый и живёт несколько минут)
 curl -s -X POST http://localhost:8080/oauth2/token \
+  -u launcher-dev:launcher-dev-secret \
   -d grant_type=authorization_code \
-  -d client_id=planner-dev \
+  -d client_id=launcher-dev \
   -d redirect_uri=http://127.0.0.1:8090/login/oauth2/code/auth \
   --data-urlencode "code=ВСТАВЬТЕ_КОД" \
   --data-urlencode "code_verifier=$VERIFIER"
+
+# 3б. Продлить вход без участия человека (refresh_token из ответа выше).
+#     Прежний refresh-токен после этого перестаёт работать — он ротируется.
+curl -s -X POST http://localhost:8080/oauth2/token \
+  -u launcher-dev:launcher-dev-secret \
+  -d grant_type=refresh_token \
+  --data-urlencode "refresh_token=ВСТАВЬТЕ_REFRESH_TOKEN"
 
 # 4. Кто я
 curl -s -H "Authorization: Bearer ACCESS_TOKEN" http://localhost:8080/userinfo
