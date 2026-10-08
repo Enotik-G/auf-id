@@ -90,7 +90,7 @@ public class AdminClientService {
         RegisteredClient existing = require(clientId);
         if (existing.getClientAuthenticationMethods().contains(ClientAuthenticationMethod.NONE)) {
             throw new InvalidClientSpecException(
-                    "Клиент " + clientId + " публичный (NATIVE или BROWSER), секрета у него нет");
+                    "Клиент " + clientId + " публичный (BROWSER), секрета у него нет");
         }
 
         String secret = generateSecret();
@@ -162,7 +162,7 @@ public class AdminClientService {
         // Refresh-токен — только настольным и мобильным приложениям (решение 2026-10-08).
         // Браузерной вкладке его негде спрятать от XSS, серверному приложению он пока не нужен,
         // а сервисному бессмысленен: за новым access-токеном оно приходит со своим секретом.
-        if (spec.kind() == ClientKind.NATIVE) {
+        if (spec.kind().issuesRefreshTokens()) {
             client.authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN);
         }
 
@@ -187,7 +187,7 @@ public class AdminClientService {
     private static TokenSettings tokenSettings(ClientKind kind) {
         TokenSettings.Builder settings = TokenSettings.builder()
                 .accessTokenTimeToLive(ACCESS_TOKEN_LIFETIME);
-        if (kind == ClientKind.NATIVE) {
+        if (kind.issuesRefreshTokens()) {
             settings.reuseRefreshTokens(false)
                     .refreshTokenTimeToLive(REFRESH_TOKEN_LIFETIME);
         }

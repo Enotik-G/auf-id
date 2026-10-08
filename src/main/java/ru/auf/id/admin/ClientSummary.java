@@ -30,15 +30,17 @@ public record ClientSummary(
      * Вид не хранится отдельным полем — он однозначно следует из настроек, а дублировать его значило бы
      * допустить расхождение между «видом» и тем, как клиент на самом деле работает.
      *
-     * <p>{@link ClientKind#NATIVE} и {@link ClientKind#BROWSER} различаются по refresh-токену: оба без
-     * секрета, но выдаётся он только настольным приложениям. Это и есть вся разница между видами,
-     * поэтому отличать их больше нечем — и не нужно.
+     * <p>{@link ClientKind#NATIVE} отличается от {@link ClientKind#CONFIDENTIAL} наличием
+     * refresh-токена: секрет есть у обоих (см. описание {@code NATIVE} — почему), а обновлять токен
+     * без участия человека разрешено только настольному приложению. {@link ClientKind#BROWSER} —
+     * единственный, кто совсем без секрета.
      */
     private static ClientKind kindOf(RegisteredClient client) {
-        boolean issuesRefreshTokens =
-                client.getAuthorizationGrantTypes().contains(AuthorizationGrantType.REFRESH_TOKEN);
         if (client.getClientAuthenticationMethods().contains(ClientAuthenticationMethod.NONE)) {
-            return issuesRefreshTokens ? ClientKind.NATIVE : ClientKind.BROWSER;
+            return ClientKind.BROWSER;
+        }
+        if (client.getAuthorizationGrantTypes().contains(AuthorizationGrantType.REFRESH_TOKEN)) {
+            return ClientKind.NATIVE;
         }
         if (client.getAuthorizationGrantTypes().contains(AuthorizationGrantType.AUTHORIZATION_CODE)) {
             return ClientKind.CONFIDENTIAL;

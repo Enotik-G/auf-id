@@ -34,18 +34,37 @@ class AdminClientServiceTest {
     @Autowired
     private PasswordEncoder passwordEncoder;
 
-    // ─────────────────────────── настольный клиент (NATIVE) ───────────────────────────
+    // ─────────────────── настольный клиент (NATIVE) и вкладка (BROWSER) ───────────────────
 
+    /**
+     * Настольному приложению секрет выдаётся — без него Spring не даёт обменять refresh-токен
+     * (см. {@code ClientKind.NATIVE}). Настоящая защита здесь — PKCE, и он обязателен.
+     */
     @Test
-    void registersNativeClientWithoutSecretAndWithPkce() {
+    void registersNativeClientWithSecretAndPkce() {
         ClientCredentials credentials = service.register(nativeSpec("planner"));
 
-        assertThat(credentials.secret()).isNull();
+        assertThat(credentials.secret()).isNotBlank();
         RegisteredClient stored = clients.findByClientId("planner");
-        assertThat(stored.getClientAuthenticationMethods()).containsExactly(ClientAuthenticationMethod.NONE);
+        assertThat(stored.getClientAuthenticationMethods())
+                .containsExactly(ClientAuthenticationMethod.CLIENT_SECRET_BASIC);
+        // В базе — только хеш секрета.
+        assertThat(stored.getClientSecret()).isNotEqualTo(credentials.secret());
+        assertThat(passwordEncoder.matches(credentials.secret(), stored.getClientSecret())).isTrue();
         assertThat(stored.getClientSettings().isRequireProofKey()).isTrue();
         assertThat(stored.getRedirectUris()).containsExactly("https://planner.college.ru/callback");
         assertThat(stored.getScopes()).containsExactlyInAnyOrder("openid", "profile", "email");
+    }
+
+    /** У вкладки секрета нет: спрятать его в браузере негде. */
+    @Test
+    void browserClientGetsNoSecret() {
+        ClientCredentials credentials = service.register(new ClientSpec("spa", "Вкладка",
+                ClientKind.BROWSER, Set.of("https://spa.college.ru/callback"), Set.of(), Set.of()));
+
+        assertThat(credentials.secret()).isNull();
+        assertThat(clients.findByClientId("spa").getClientAuthenticationMethods())
+                .containsExactly(ClientAuthenticationMethod.NONE);
     }
 
     /**
@@ -217,12 +236,28 @@ class AdminClientServiceTest {
         assertThat(passwordEncoder.matches(first.secret(), storedHash)).isFalse();
     }
 
+    /** Секрета нет только у вкладки — ей и отказываем. */
     @Test
-    void refusesToRotateSecretOfPublicClient() {
-        service.register(nativeSpec("planner"));
+    void refusesToRotateSecretOfBrowserClient() {
+        service.register(new ClientSpec("spa", "Вкладка", ClientKind.BROWSER,
+                Set.of("https://spa.college.ru/callback"), Set.of(), Set.of()));
 
-        assertThatThrownBy(() -> service.rotateSecret("planner"))
-                .isInstanceOf(InvalidClientSpecException.class);
+        assertThatThrownBy(() -> service.rotateSecret("spa"))
+                .isInstanceOf(InvalidClientSpecException.class)
+                .hasMessageContaining("BROWSER");
+    }
+
+    /** Настольному приложению секрет выдан, значит его можно и заменить. */
+    @Test
+    void rotatesSecretOfNativeClient() {
+        String firstSecret = service.register(nativeSpec("launcher")).secret();
+
+        String secondSecret = service.rotateSecret("launcher").secret();
+
+        assertThat(secondSecret).isNotBlank().isNotEqualTo(firstSecret);
+        RegisteredClient stored = clients.findByClientId("launcher");
+        assertThat(passwordEncoder.matches(secondSecret, stored.getClientSecret())).isTrue();
+        assertThat(passwordEncoder.matches(firstSecret, stored.getClientSecret())).isFalse();
     }
 
     @Test
