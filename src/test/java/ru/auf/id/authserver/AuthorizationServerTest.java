@@ -204,6 +204,29 @@ class AuthorizationServerTest {
         assertThat(row.values()).allSatisfy(value -> assertThat((String) value).startsWith("sha256:"));
     }
 
+    /**
+     * Код одноразовый: второй обмен того же кода отклоняется.
+     *
+     * <p>Тест стоит именно здесь, рядом с хешированием: отметку «код использован» Spring хранит в
+     * метаданных токена, а {@link HashedTokenAuthorizationService} пересобирает токен, подменяя
+     * значение. Потеряйся при этом метаданные — код остался бы одноразовым только на словах,
+     * и заметить это по остальным тестам было бы нельзя.
+     */
+    @Test
+    void sameCodeCannotBeExchangedTwice() throws Exception {
+        String code = authorize();
+        exchangeCodeForTokens(code);
+
+        mockMvc.perform(post("/oauth2/token")
+                        .param("grant_type", "authorization_code")
+                        .param("code", code)
+                        .param("redirect_uri", REDIRECT_URI)
+                        .param("client_id", CLIENT_ID)
+                        .param("code_verifier", codeVerifier))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("invalid_grant"));
+    }
+
     @Test
     void userinfoReturnsSubjectForIssuedToken() throws Exception {
         String accessToken = JsonPath.read(exchangeCodeForTokens(authorize()), "$.access_token");
