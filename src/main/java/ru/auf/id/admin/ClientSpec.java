@@ -10,7 +10,11 @@ import java.util.Set;
  *
  * @param clientId               короткое имя сервиса, по нему он представляется: {@code planner}, {@code meet}
  * @param name                   название для человека
- * @param redirectUris           адреса возврата; для {@link ClientKind#SERVICE} должны быть пустыми
+ * @param redirectUris           адреса возврата; для {@link ClientKind#SERVICE} должны быть пустыми.
+ *                               Настольному приложению ({@link ClientKind#NATIVE}) годится
+ *                               {@code http://127.0.0.1:<порт>/...}: Spring разрешает любой порт для
+ *                               loopback-адресов (RFC 8252 §7.3), поэтому лаунчер может занять
+ *                               свободный, а здесь достаточно указать один
  * @param postLogoutRedirectUris куда вернуть после выхода; необязательны
  * @param scopes                 запрашиваемые права; пустой набор означает openid, profile, email
  */
@@ -24,7 +28,9 @@ public record ClientSpec(
         String name,
 
         @Schema(description = """
-                PUBLIC — браузерное или мобильное приложение, без секрета, с PKCE.
+                NATIVE — настольное или мобильное приложение (лаунчер), без секрета, с PKCE.
+                Единственный вид, которому выдаётся refresh-токен: 30 дней, с ротацией.
+                BROWSER — приложение в браузерной вкладке (SPA), без секрета и без refresh-токена.
                 CONFIDENTIAL — серверное приложение, с секретом.
                 SERVICE — сервис к сервису, поток client_credentials, без адресов возврата.""")
         ClientKind kind,

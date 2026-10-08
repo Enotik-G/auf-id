@@ -11,6 +11,7 @@ import ru.auf.id.user.UserRepository;
 import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -225,6 +226,85 @@ class AuthorizationServerTest {
                         .param("code_verifier", codeVerifier))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").value("invalid_grant"));
+    }
+
+    // ─────────────────────────── refresh-токены (шаг 16) ───────────────────────────
+
+    /**
+     * Лаунчер получает refresh-токен вместе с access-токеном и меняет его на новый access-токен
+     * без участия человека. Без этого вход живёт 10 минут, и лаунчер каждые 10 минут открывал бы
+     * браузер заново.
+     */
+    @Test
+    @Disabled("Шаг 16 не завершён: публичный клиент не может представиться на /oauth2/token с grant_type=refresh_token — PublicClientAuthenticationConverter срабатывает только на запросах с PKCE. Нужно решение пользователя, см. CLAUDE.md, задача 7.")
+    void refreshTokenBuysANewAccessTokenWithoutTheUser() throws Exception {
+        String refreshToken = JsonPath.read(exchangeCodeForTokens(authorize()), "$.refresh_token");
+
+        String refreshed = refresh(refreshToken);
+
+        Jwt accessToken = jwtDecoder.decode(JsonPath.read(refreshed, "$.access_token"));
+        assertThat(accessToken.getSubject()).isEqualTo(user.getId().toString());
+        assertThat(Duration.between(accessToken.getIssuedAt(), accessToken.getExpiresAt()))
+                .isEqualTo(Duration.ofMinutes(10));
+    }
+
+    /**
+     * Ротация: обновление выдаёт <b>новый</b> refresh-токен, прежний перестаёт работать.
+     *
+     * <p>У Spring по умолчанию наоборот ({@code reuseRefreshTokens = true}) — возвращается тот же
+     * токен. Тогда украденный токен работал бы все 30 дней, и кража ничем бы себя не выдала.
+     */
+    @Test
+    @Disabled("Шаг 16 не завершён: публичный клиент не может представиться на /oauth2/token с grant_type=refresh_token — PublicClientAuthenticationConverter срабатывает только на запросах с PKCE. Нужно решение пользователя, см. CLAUDE.md, задача 7.")
+    void refreshTokenIsRotatedAndTheOldOneStopsWorking() throws Exception {
+        String firstRefreshToken = JsonPath.read(exchangeCodeForTokens(authorize()), "$.refresh_token");
+
+        String secondRefreshToken = JsonPath.read(refresh(firstRefreshToken), "$.refresh_token");
+        assertThat(secondRefreshToken).isNotEqualTo(firstRefreshToken);
+
+        mockMvc.perform(post("/oauth2/token")
+                        .param("grant_type", "refresh_token")
+                        .param("refresh_token", firstRefreshToken)
+                        .param("client_id", CLIENT_ID))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("invalid_grant"));
+    }
+
+    /** Срок refresh-токена отсчитывается заново от каждого обновления — скользящее окно 30 дней. */
+    @Test
+    void refreshTokenIsStoredWithAThirtyDayLifetime() throws Exception {
+        exchangeCodeForTokens(authorize());
+
+        var row = jdbc.queryForMap(
+                "SELECT refresh_token_issued_at, refresh_token_expires_at FROM oauth2_authorization"
+                        + " WHERE principal_name = ?",
+                user.getId().toString());
+
+        Duration lifetime = Duration.between(
+                ((java.sql.Timestamp) row.get("refresh_token_issued_at")).toInstant(),
+                ((java.sql.Timestamp) row.get("refresh_token_expires_at")).toInstant());
+        assertThat(lifetime).isEqualTo(Duration.ofDays(30));
+    }
+
+    /** В БД refresh-токен тоже лежит хешем (шаг 12), а не открытым текстом. */
+    @Test
+    void refreshTokenIsStoredOnlyAsHash() throws Exception {
+        String refreshToken = JsonPath.read(exchangeCodeForTokens(authorize()), "$.refresh_token");
+
+        String stored = jdbc.queryForObject(
+                "SELECT refresh_token_value FROM oauth2_authorization WHERE principal_name = ?",
+                String.class, user.getId().toString());
+
+        assertThat(stored).isEqualTo(HashedTokenAuthorizationService.hash(refreshToken));
+    }
+
+    private String refresh(String refreshToken) throws Exception {
+        return mockMvc.perform(post("/oauth2/token")
+                        .param("grant_type", "refresh_token")
+                        .param("refresh_token", refreshToken)
+                        .param("client_id", CLIENT_ID))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
     }
 
     @Test

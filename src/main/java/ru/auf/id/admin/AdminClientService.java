@@ -34,6 +34,14 @@ public class AdminClientService {
     /** Access token живёт 10 минут: сервисы проверяют его сами, без запроса в Auth (решение архитектуры). */
     private static final Duration ACCESS_TOKEN_LIFETIME = Duration.ofMinutes(10);
 
+    /**
+     * Refresh-токен живёт 30 дней — и срок считается заново от каждого обновления (решение 2026-10-08).
+     *
+     * <p>Скользящее окно получается само: при ротации выдаётся новый токен, а ему Spring берёт срок
+     * из этой же настройки. Пользуешься — срок продлевается, забросил на месяц — вход заново.
+     */
+    private static final Duration REFRESH_TOKEN_LIFETIME = Duration.ofDays(30);
+
     private static final Set<String> DEFAULT_SCOPES =
             Set.of(OidcScopes.OPENID, OidcScopes.PROFILE, OidcScopes.EMAIL);
 
@@ -67,7 +75,7 @@ public class AdminClientService {
             throw new ClientAlreadyExistsException(spec.clientId());
         }
 
-        String secret = spec.kind() == ClientKind.PUBLIC ? null : generateSecret();
+        String secret = spec.kind().isPublic() ? null : generateSecret();
         clients.save(build(spec, secret));
         return new ClientCredentials(spec.clientId(), secret);
     }
@@ -81,7 +89,8 @@ public class AdminClientService {
     public ClientCredentials rotateSecret(String clientId) {
         RegisteredClient existing = require(clientId);
         if (existing.getClientAuthenticationMethods().contains(ClientAuthenticationMethod.NONE)) {
-            throw new InvalidClientSpecException("У публичного клиента " + clientId + " секрета нет");
+            throw new InvalidClientSpecException(
+                    "Клиент " + clientId + " публичный (NATIVE или BROWSER), секрета у него нет");
         }
 
         String secret = generateSecret();
@@ -130,20 +139,17 @@ public class AdminClientService {
         RegisteredClient.Builder client = RegisteredClient.withId(UUID.randomUUID().toString())
                 .clientId(spec.clientId())
                 .clientName(spec.name())
-                .tokenSettings(TokenSettings.builder()
-                        .accessTokenTimeToLive(ACCESS_TOKEN_LIFETIME)
-                        .build());
+                .tokenSettings(tokenSettings(spec.kind()));
 
         if (spec.kind() == ClientKind.SERVICE) {
-            client.clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
-                    .authorizationGrantType(AuthorizationGrantType.CLIENT_CREDENTIALS)
+            client.authorizationGrantType(AuthorizationGrantType.CLIENT_CREDENTIALS)
                     .clientSettings(ClientSettings.builder().build());
             // У сервисного клиента нет человека, поэтому ни openid, ни профиля: только свои права.
             spec.scopes().forEach(client::scope);
         } else {
             client.authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
                     .clientSettings(ClientSettings.builder()
-                            // PKCE обязателен для обоих видов: так требует OAuth 2.1.
+                            // PKCE обязателен для всех видов с человеком: так требует OAuth 2.1.
                             .requireProofKey(true)
                             // Свои сервисы: спрашивать «разрешить доступ?» незачем.
                             .requireAuthorizationConsent(false)
@@ -153,16 +159,39 @@ public class AdminClientService {
             spec.postLogoutRedirectUris().forEach(client::postLogoutRedirectUri);
         }
 
-        if (spec.kind() == ClientKind.PUBLIC) {
-            client.clientAuthenticationMethod(ClientAuthenticationMethod.NONE);
-        } else if (spec.kind() == ClientKind.CONFIDENTIAL) {
-            client.clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC);
+        // Refresh-токен — только настольным и мобильным приложениям (решение 2026-10-08).
+        // Браузерной вкладке его негде спрятать от XSS, серверному приложению он пока не нужен,
+        // а сервисному бессмысленен: за новым access-токеном оно приходит со своим секретом.
+        if (spec.kind() == ClientKind.NATIVE) {
+            client.authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN);
         }
+
+        client.clientAuthenticationMethod(spec.kind().isPublic()
+                ? ClientAuthenticationMethod.NONE
+                : ClientAuthenticationMethod.CLIENT_SECRET_BASIC);
         if (secret != null) {
             client.clientSecret(passwordEncoder.encode(secret));
         }
 
         return client.build();
+    }
+
+    /**
+     * Сроки жизни токенов и ротация refresh-токена.
+     *
+     * <p>Умолчания Spring здесь не годятся: {@code reuseRefreshTokens} у него {@code true}
+     * (на обновление возвращается <b>тот же</b> refresh-токен), а срок refresh-токена — 60 минут.
+     * Нам нужно обратное: каждый обмен выдаёт новый токен, а старый перестаёт работать. Без ротации
+     * украденный токен работал бы все 30 дней и кража ничем бы себя не выдала.
+     */
+    private static TokenSettings tokenSettings(ClientKind kind) {
+        TokenSettings.Builder settings = TokenSettings.builder()
+                .accessTokenTimeToLive(ACCESS_TOKEN_LIFETIME);
+        if (kind == ClientKind.NATIVE) {
+            settings.reuseRefreshTokens(false)
+                    .refreshTokenTimeToLive(REFRESH_TOKEN_LIFETIME);
+        }
+        return settings.build();
     }
 
     private void validate(ClientSpec spec) {

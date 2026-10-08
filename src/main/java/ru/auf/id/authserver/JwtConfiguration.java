@@ -8,8 +8,15 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.oauth2.jose.jws.SignatureAlgorithm;
+import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
+import org.springframework.security.oauth2.server.authorization.token.DelegatingOAuth2TokenGenerator;
 import org.springframework.security.oauth2.server.authorization.token.JwtEncodingContext;
+import org.springframework.security.oauth2.server.authorization.token.JwtGenerator;
+import org.springframework.security.oauth2.server.authorization.token.OAuth2AccessTokenGenerator;
 import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenCustomizer;
+import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenGenerator;
+
+import java.time.Clock;
 
 /** Чем подписываются токены и что в них лежит. */
 @Configuration(proxyBeanMethods = false)
@@ -38,5 +45,37 @@ public class JwtConfiguration {
             context.getJwsHeader().algorithm(SignatureAlgorithm.ES256);
             userClaims.addTo(context);
         };
+    }
+
+    /**
+     * Чем выпускаются токены. Такую же цепочку Spring Authorization Server собирает сам, если этого
+     * бина нет — здесь она повторена, чтобы подменить в ней <b>один</b> генератор.
+     *
+     * <p>Причина: штатный генератор refresh-токенов не выдаёт их публичным клиентам, а наш лаунчер —
+     * публичный клиент, которому refresh-токен необходим. Подробно — в
+     * {@link NativeClientRefreshTokenGenerator}.
+     *
+     * <p>Состав цепочки — порядок важен, {@code DelegatingOAuth2TokenGenerator} берёт первый
+     * генератор, вернувший не {@code null}:
+     * <ul>
+     *   <li>{@link JwtGenerator} — самодостаточные токены (JWT): access token и id_token.
+     *       Ему же передаётся наш {@link #tokenCustomizer}: иначе подпись ES256 и личные поля
+     *       в токен не попадут, ведь customizer Spring подключает к генератору, которого больше нет;</li>
+     *   <li>{@link OAuth2AccessTokenGenerator} — непрозрачные access-токены, для клиентов с форматом
+     *       {@code reference}. Таких у нас нет, но генератор оставлен, чтобы цепочка совпадала
+     *       со штатной: иначе такой клиент тихо перестал бы работать;</li>
+     *   <li>{@link NativeClientRefreshTokenGenerator} — refresh-токены.</li>
+     * </ul>
+     */
+    @Bean
+    OAuth2TokenGenerator<?> tokenGenerator(JWKSource<SecurityContext> jwkSource,
+                                           OAuth2TokenCustomizer<JwtEncodingContext> tokenCustomizer,
+                                           Clock clock) {
+        JwtGenerator jwtGenerator = new JwtGenerator(new NimbusJwtEncoder(jwkSource));
+        jwtGenerator.setJwtCustomizer(tokenCustomizer);
+        return new DelegatingOAuth2TokenGenerator(
+                jwtGenerator,
+                new OAuth2AccessTokenGenerator(),
+                new NativeClientRefreshTokenGenerator(clock));
     }
 }
