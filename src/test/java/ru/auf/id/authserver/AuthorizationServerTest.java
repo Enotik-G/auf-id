@@ -333,6 +333,59 @@ class AuthorizationServerTest {
         return httpBasic(CLIENT_ID, DevClientRegistration.LAUNCHER_CLIENT_SECRET);
     }
 
+    /**
+     * Украденный refresh-токен обрывает всю цепочку (шаг 25).
+     *
+     * <p>Сценарий: токен утёк, вор обменял его первым. Ротация сделала своё — прежний токен уже
+     * не действует, — но этого мало: у вора на руках свежий рабочий токен, а честное приложение
+     * просто «разлогинилось». Поэтому повторное предъявление погашенного токена трактуется как
+     * кража, и доступ теряют <b>оба</b>: человек входит заново, вор остаётся ни с чем.
+     */
+    @Test
+    void reusedRefreshTokenRevokesTheWholeChain() throws Exception {
+        String stolen = JsonPath.read(exchangeCodeForTokens(authorize()), "$.refresh_token");
+        String current = JsonPath.read(refresh(stolen), "$.refresh_token");
+
+        // Вор предъявляет уже погашенный токен.
+        mockMvc.perform(post("/oauth2/token")
+                        .with(clientSecret())
+                        .param("grant_type", "refresh_token")
+                        .param("refresh_token", stolen))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("invalid_grant"));
+
+        // Цепочка оборвана: ещё живой токен честного приложения тоже больше не работает.
+        mockMvc.perform(post("/oauth2/token")
+                        .with(clientSecret())
+                        .param("grant_type", "refresh_token")
+                        .param("refresh_token", current))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("invalid_grant"));
+
+        // И строка авторизации удалена, а не просто помечена.
+        Integer left = jdbc.queryForObject(
+                "SELECT count(*) FROM oauth2_authorization WHERE principal_name = ?",
+                Integer.class, user.getId().toString());
+        assertThat(left).isZero();
+    }
+
+    /**
+     * Обычная ротация ничего не отзывает — проверка на ложное срабатывание.
+     *
+     * <p>Без неё легко сделать защиту, которая выбрасывает человека при каждом втором обновлении
+     * токена: ведь при ротации прежнее значение тоже перестаёт действовать.
+     */
+    @Test
+    void ordinaryRotationRevokesNothing() throws Exception {
+        String first = JsonPath.read(exchangeCodeForTokens(authorize()), "$.refresh_token");
+        String second = JsonPath.read(refresh(first), "$.refresh_token");
+
+        // Третье обновление подряд проходит как обычно.
+        String third = JsonPath.read(refresh(second), "$.refresh_token");
+
+        assertThat(third).isNotBlank().isNotEqualTo(second).isNotEqualTo(first);
+    }
+
     private String refresh(String refreshToken) throws Exception {
         return mockMvc.perform(post("/oauth2/token")
                         .with(clientSecret())

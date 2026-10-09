@@ -41,4 +41,24 @@ public class UserAuthorizationRevoker {
     public int revokeAll(UUID userId) {
         return jdbc.update("DELETE FROM oauth2_authorization WHERE principal_name = ?", userId.toString());
     }
+
+    /**
+     * Удаляет авторизации пользователя <b>у одного клиента</b>, остальные не трогает.
+     *
+     * <p>Нужно при краже refresh-токена ({@link RefreshTokenReuseDetector}): украли токен лаунчера —
+     * вылетает лаунчер, а в планировщике человек остаётся. Это соразмерно случившемуся: утёк токен
+     * одного приложения, а не пароль. Решение пользователя от 2026-10-08.
+     *
+     * <p>Оба параметра — строки, а не {@code UUID}, потому что приходят из самой авторизации:
+     * {@code principal_name} может оказаться и {@code client_id} (у потока {@code client_credentials}
+     * владелец — сам сервис), а {@code registered_client_id} — это внутренний id клиента из
+     * {@code oauth2_registered_client.id}, не его {@code client_id}.
+     *
+     * @return сколько авторизаций удалено
+     */
+    public int revokeAllForClient(String principalName, String registeredClientId) {
+        return jdbc.update(
+                "DELETE FROM oauth2_authorization WHERE principal_name = ? AND registered_client_id = ?",
+                principalName, registeredClientId);
+    }
 }

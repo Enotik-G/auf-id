@@ -2,6 +2,7 @@ package ru.auf.id.admin;
 
 import ru.auf.id.TestcontainersConfiguration;
 import ru.auf.id.authserver.AuthorizationStoreConfiguration;
+import ru.auf.id.authserver.RefreshTokenReuseDetector;
 import ru.auf.id.login.PepperedPasswordEncoder;
 import ru.auf.id.user.PasswordHasher;
 import org.junit.jupiter.api.Test;
@@ -9,6 +10,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClient;
@@ -24,6 +26,14 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @Import({TestcontainersConfiguration.class, AuthorizationStoreConfiguration.class,
         AdminClientService.class, PepperedPasswordEncoder.class, PasswordHasher.class})
 class AdminClientServiceTest {
+
+    /**
+     * Этот тест — срез без Redis, а {@code AuthorizationStoreConfiguration} собирает хранилище
+     * авторизаций вместе с выявлением кражи refresh-токенов, которому Redis нужен. Регистрация
+     * клиентов к этому отношения не имеет, поэтому подменяем заглушкой.
+     */
+    @MockitoBean
+    private RefreshTokenReuseDetector refreshTokenReuseDetector;
 
     @Autowired
     private AdminClientService service;
