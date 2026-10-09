@@ -176,6 +176,8 @@ docker compose exec redis redis-cli --scan --pattern 'rate:*'           | xargs 
 | `DB_HOST` / `DB_PORT` | `localhost` / `5432` | Где искать базу |
 | `REDIS_HOST` / `REDIS_PORT` | `localhost` / `6379` | Redis. Пароль — `SPRING_DATA_REDIS_PASSWORD`. |
 | `SESSION_COOKIE_SECURE` | `false` | Cookie сессии только по HTTPS. **На сервере — `true`.** |
+| `FORWARD_HEADERS_STRATEGY` | `none` | `native` — брать адрес клиента из `X-Forwarded-For`. **За прокси обязательно**, иначе все пользователи попадут в один лимит. |
+| `TRUSTED_PROXIES` | `127.0.0.1/32` | От кого принимать `X-Forwarded-For`, список сетей (CIDR). **На сервере — адрес своего прокси**, например `10.0.0.5/32`. |
 | `BOOTSTRAP_ADMIN_EMAILS` | пусто | Почты первых администраторов через запятую. Роль `ADMIN` выдаётся им при входе. Пусто — механизм отключён. |
 | `AUTH_DEV_CLIENT_ENABLED` | `false` | Регистрировать клиентов `launcher-dev` и `planner-dev` для локальной разработки. **На сервере — не включать.** |
 | `SPRINGDOC_API_DOCS_ENABLED`, `SPRINGDOC_SWAGGER_UI_ENABLED` | `true` | Swagger. Можно выключить на сервере. |
@@ -477,9 +479,11 @@ java -jar target/auf-id-0.0.1-SNAPSHOT.jar
 - [ ] `AUTH_DEV_CLIENT_ENABLED` **не** включён.
 - [ ] Свой пароль БД (`DB_PASSWORD`), адрес БД (`SPRING_DATASOURCE_URL`).
 - [ ] Решено, нужен ли Swagger снаружи (`SPRINGDOC_*_ENABLED=false`).
-- [ ] **Прокси и IP:** лимиты считаются по адресу клиента. За прокси приложение увидит адрес прокси —
-      все пользователи попадут в один лимит. Включить `SERVER_FORWARD_HEADERS_STRATEGY=native` и доверять
-      `X-Forwarded-For` **только от своего прокси** (иначе лимит обходится подделкой заголовка).
+- [ ] **Прокси и IP** (шаг 20): `FORWARD_HEADERS_STRATEGY=native` и `TRUSTED_PROXIES=<адрес прокси>/32`.
+      Без первого все пользователи попадут в один лимит — за прокси приложение видит адрес прокси, а не
+      человека. Без второго лимит обходится подделкой `X-Forwarded-For`: умолчание Tomcat доверяет **всем**
+      частным сетям, то есть в Docker — любому контейнеру. Поэтому здесь сужено до loopback, а на сервере
+      надо указать конкретный адрес.
 
 ### Ограничения масштабирования (пока)
 
