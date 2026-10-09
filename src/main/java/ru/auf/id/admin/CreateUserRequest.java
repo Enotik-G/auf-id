@@ -11,7 +11,7 @@ import java.util.Set;
 @Schema(description = "Данные новой учётной записи")
 public record CreateUserRequest(
 
-        @Schema(description = "Почта. Регистр и пробелы по краям не важны.", example = "ivan.petrov@college.ru")
+        @Schema(description = "Почта колледжа (домен sinhub.ru). Регистр и пробелы по краям не важны.", example = "ivan.petrov@sinhub.ru")
         @NotBlank
         @Size(max = 254)
         String email,

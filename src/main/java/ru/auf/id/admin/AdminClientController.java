@@ -74,6 +74,7 @@ public class AdminClientController {
             summary = "Выдать новый секрет",
             description = "Прежний секрет перестаёт работать сразу — сервис придётся перенастроить.")
     @ApiResponse(responseCode = "400", description = "У публичного клиента секрета нет", content = @Content)
+    @ApiResponse(responseCode = "404", description = "Клиент не зарегистрирован", content = @Content)
     public ClientCredentials rotateSecret(@PathVariable String clientId) {
         return clients.rotateSecret(clientId);
     }
@@ -85,6 +86,7 @@ public class AdminClientController {
             description = """
                     Удаляет клиента вместе с выданными ему авторизациями: его токены перестают
                     обновляться, а уже выданные доживают свои 10 минут.""")
+    @ApiResponse(responseCode = "404", description = "Клиент не зарегистрирован", content = @Content)
     public void unregister(@PathVariable String clientId) {
         clients.unregister(clientId);
     }

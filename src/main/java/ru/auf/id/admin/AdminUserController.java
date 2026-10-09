@@ -65,6 +65,7 @@ public class AdminUserController {
                     через `POST /api/v1/admin/users/{id}/activation-link`.""")
     @ApiResponse(responseCode = "201", description = "Учётка создана, ссылка в ответе")
     @ApiResponse(responseCode = "409", description = "Учётка с такой почтой уже есть", content = @Content)
+    @ApiResponse(responseCode = "400", description = "Почта некорректна или не в домене колледжа, не указано имя", content = @Content)
     public InvitationResponse createUser(@Valid @RequestBody CreateUserRequest request) {
         Invitation invitation = provisioning.invite(
                 new EmailAddress(request.email()), request.fullName().strip(), request.roles());
@@ -83,6 +84,7 @@ public class AdminUserController {
             summary = "Выдать новую ссылку активации",
             description = "Прежние ссылки этой учётки перестают работать — старая могла уйти не туда.")
     @ApiResponse(responseCode = "409", description = "Учётка уже активирована или заблокирована", content = @Content)
+    @ApiResponse(responseCode = "404", description = "Учётки нет", content = @Content)
     public InvitationResponse reissueActivationLink(@PathVariable UUID userId) {
         return toResponse(provisioning.reissueInvitation(userId));
     }
@@ -96,6 +98,7 @@ public class AdminUserController {
 
                     Уже выданные access-токены продолжают работать до истечения — до 10 минут.""")
     @ApiResponse(responseCode = "409", description = "Это последний действующий администратор", content = @Content)
+    @ApiResponse(responseCode = "404", description = "Учётки нет", content = @Content)
     public void block(@PathVariable UUID userId) {
         adminUsers.block(userId);
     }
@@ -108,6 +111,7 @@ public class AdminUserController {
                     Учётка с паролем возвращается в `ACTIVE`, без пароля — в `INVITED`:
                     во вторую всё равно нельзя войти, пока не выдана ссылка активации.""")
     @ApiResponse(responseCode = "409", description = "Учётка не заблокирована", content = @Content)
+    @ApiResponse(responseCode = "404", description = "Учётки нет", content = @Content)
     public void unblock(@PathVariable UUID userId) {
         adminUsers.unblock(userId);
     }
@@ -115,6 +119,7 @@ public class AdminUserController {
     @PutMapping("/{userId}/roles/{role}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @Operation(summary = "Выдать роль", description = "Повторная выдача той же роли ничего не меняет.")
+    @ApiResponse(responseCode = "404", description = "Учётки нет", content = @Content)
     public void grantRole(@PathVariable UUID userId, @PathVariable Role role) {
         adminUsers.grantRole(userId, role);
     }
@@ -125,6 +130,7 @@ public class AdminUserController {
             summary = "Снять роль",
             description = "Снять `ADMIN` у последнего действующего администратора нельзя.")
     @ApiResponse(responseCode = "409", description = "Это последний действующий администратор", content = @Content)
+    @ApiResponse(responseCode = "404", description = "Учётки нет", content = @Content)
     public void revokeRole(@PathVariable UUID userId, @PathVariable Role role) {
         adminUsers.revokeRole(userId, role);
     }
