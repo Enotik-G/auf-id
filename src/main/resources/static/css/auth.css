@@ -58,6 +58,9 @@ button.secondary:hover { background: #dde3e9; }
 
 .captcha { display: block; margin: 0 0 16px; }
 
+label.checkbox { display: flex; gap: 8px; align-items: flex-start; margin: 0 0 16px; font-weight: 400; line-height: 1.4; }
+label.checkbox input { margin-top: 3px; }
+
 .message { margin: 0 0 16px; padding: 10px 12px; border-radius: 8px; font-size: 14px; line-height: 1.4; }
 .message.error { background: #ffebe9; color: #82071e; }
 .message.info { background: #ddf4ff; color: #0a3069; }

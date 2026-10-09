@@ -11,6 +11,8 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.hamcrest.Matchers.containsString;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -64,13 +66,40 @@ class ActivationPageControllerTest {
     @Test
     void setsPasswordAndRedirectsToSuccess() throws Exception {
         mockMvc.perform(post("/activate").with(csrf())
+                        .with(request -> {
+                            request.setRemoteAddr("203.0.113.5");
+                            return request;
+                        })
                         .param("token", TOKEN)
                         .param("password", PASSWORD)
-                        .param("passwordConfirmation", PASSWORD))
+                        .param("passwordConfirmation", PASSWORD)
+                        .param("consent", "true"))
                 .andExpect(status().is3xxRedirection())
                 .andExpect(redirectedUrl("/activate/done"));
 
-        verify(provisioning).activate(TOKEN, PASSWORD);
+        // Адрес уходит в запись о согласии.
+        verify(provisioning).activate(TOKEN, PASSWORD, "203.0.113.5");
+    }
+
+    /** Без согласия на обработку ПДн учётку не активируем — даже если форму отправили мимо браузера. */
+    @Test
+    void refusesActivationWithoutConsent() throws Exception {
+        mockMvc.perform(post("/activate").with(csrf())
+                        .param("token", TOKEN)
+                        .param("password", PASSWORD)
+                        .param("passwordConfirmation", PASSWORD))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("Без согласия на обработку персональных данных")));
+
+        verifyNoInteractions(provisioning);
+    }
+
+    @Test
+    void formShowsConsentCheckboxLinkingToTheText() throws Exception {
+        mockMvc.perform(get("/activate").param("token", TOKEN))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("name=\"consent\"")))
+                .andExpect(content().string(containsString("/consent/personal-data")));
     }
 
     @Test
@@ -126,12 +155,13 @@ class ActivationPageControllerTest {
 
     @Test
     void showsInvalidLinkWhenServiceRejectsTheToken() throws Exception {
-        doThrow(new InvalidOneTimeTokenException()).when(provisioning).activate(TOKEN, PASSWORD);
+        doThrow(new InvalidOneTimeTokenException()).when(provisioning).activate(eq(TOKEN), eq(PASSWORD), any());
 
         mockMvc.perform(post("/activate").with(csrf())
                         .param("token", TOKEN)
                         .param("password", PASSWORD)
-                        .param("passwordConfirmation", PASSWORD))
+                        .param("passwordConfirmation", PASSWORD)
+                        .param("consent", "true"))
                 .andExpect(status().isOk())
                 .andExpect(content().string(containsString("Ссылка недействительна")));
     }
