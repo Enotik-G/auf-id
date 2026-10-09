@@ -1,8 +1,7 @@
 package ru.auf.id.admin;
 
-import ru.auf.id.TestTime;
-import ru.auf.id.user.UserRepository;
 import ru.auf.id.SecurityConfiguration;
+import ru.auf.id.TestTime;
 import ru.auf.id.provisioning.EmailAlreadyTakenException;
 import ru.auf.id.provisioning.Invitation;
 import ru.auf.id.provisioning.ProvisioningService;
@@ -10,21 +9,27 @@ import ru.auf.id.user.EmailAddress;
 import ru.auf.id.user.Role;
 import ru.auf.id.user.User;
 import ru.auf.id.user.UserNotFoundException;
+import ru.auf.id.user.UserRepository;
+import ru.auf.id.user.UserStatus;
 import ru.auf.id.user.WrongUserStatusException;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -32,6 +37,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -185,6 +191,71 @@ class AdminUserControllerTest {
 
         verify(adminUsers).block(USER_ID);
         verify(adminUsers).unblock(USER_ID);
+    }
+
+    // ─────────────────────────── список и правка ───────────────────────────
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void listsUsersAsStablePage() throws Exception {
+        User ivan = User.invited(new EmailAddress("ivan@sinhub.ru"), "Иван Петров", TestTime.NOW);
+        when(adminUsers.list(eq("петров"), eq(UserStatus.INVITED), any()))
+                .thenReturn(new PageImpl<>(List.of(ivan), PageRequest.of(0, 20), 1));
+
+        mockMvc.perform(get("/api/v1/admin/users").param("query", "петров").param("status", "INVITED"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].email").value("ivan@sinhub.ru"))
+                .andExpect(jsonPath("$.page").value(0))
+                .andExpect(jsonPath("$.size").value(20))
+                .andExpect(jsonPath("$.total").value(1));
+    }
+
+    /** Страница на тысячи строк — лишняя нагрузка: больше 100 за раз не отдаём. */
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void refusesTooLargePage() throws Exception {
+        mockMvc.perform(get("/api/v1/admin/users").param("size", "101"))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(adminUsers);
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void updatesNameAndEmail() throws Exception {
+        User renamed = User.invited(new EmailAddress("ivan.sidorov@sinhub.ru"), "Иван Сидоров", TestTime.NOW);
+        when(adminUsers.update(USER_ID, "Иван Сидоров", "ivan.sidorov@sinhub.ru")).thenReturn(renamed);
+
+        mockMvc.perform(patch("/api/v1/admin/users/" + USER_ID).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"fullName": "Иван Сидоров", "email": "ivan.sidorov@sinhub.ru"}"""))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.fullName").value("Иван Сидоров"));
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void refusesEmptyUpdate() throws Exception {
+        mockMvc.perform(patch("/api/v1/admin/users/" + USER_ID).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(adminUsers);
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void reportsTakenEmailOnUpdateAsConflict() throws Exception {
+        when(adminUsers.update(USER_ID, null, "oleg@sinhub.ru"))
+                .thenThrow(new EmailAlreadyTakenException(new EmailAddress("oleg@sinhub.ru")));
+
+        mockMvc.perform(patch("/api/v1/admin/users/" + USER_ID).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email": "oleg@sinhub.ru"}"""))
+                .andExpect(status().isConflict());
     }
 
     // ─────────────────────────── защита от CSRF ───────────────────────────

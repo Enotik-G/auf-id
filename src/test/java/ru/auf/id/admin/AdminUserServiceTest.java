@@ -7,6 +7,9 @@ import ru.auf.id.authserver.UserAuthorizationRevoker;
 import ru.auf.id.onetimetoken.InvalidOneTimeTokenException;
 import ru.auf.id.onetimetoken.OneTimeTokenService;
 import ru.auf.id.onetimetoken.TokenPurpose;
+import ru.auf.id.provisioning.EmailAlreadyTakenException;
+import ru.auf.id.user.AllowedEmailDomains;
+import ru.auf.id.user.InvalidEmailException;
 import ru.auf.id.user.EmailAddress;
 import ru.auf.id.user.PasswordCredential;
 import ru.auf.id.user.PasswordCredentialRepository;
@@ -20,6 +23,9 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.util.UUID;
@@ -30,7 +36,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @DataJpaTest
 @Import({TestcontainersConfiguration.class, ClockConfiguration.class,
         AdminUserService.class, OneTimeTokenService.class, PasswordHasher.class,
-        UserAuthorizationRevoker.class})
+        UserAuthorizationRevoker.class, AllowedEmailDomains.class})
 class AdminUserServiceTest {
 
     @Autowired
@@ -211,6 +217,107 @@ class AdminUserServiceTest {
         return jdbc.queryForObject(
                 "SELECT count(*) FROM oauth2_authorization WHERE principal_name = ?",
                 Integer.class, owner.getId().toString());
+    }
+
+    // ─────────────────────────── список ───────────────────────────
+
+    @Test
+    void listsUsersAlphabeticallyByEmailInPages() {
+        activeUser("boris@sinhub.ru");
+        activeUser("anna@sinhub.ru");
+        activeUser("vera@sinhub.ru");
+
+        Page<User> first = admin.list(null, null, PageRequest.of(0, 2, Sort.by("email")));
+
+        assertThat(first.getContent()).extracting(user -> user.getEmail().value())
+                .containsExactly("anna@sinhub.ru", "boris@sinhub.ru");
+        assertThat(first.getTotalElements()).isEqualTo(3);
+    }
+
+    @Test
+    void findsBySubstringOfNameOrEmailIgnoringCase() {
+        User ivan = activeUser("ivan.petrov@sinhub.ru");
+        User anna = activeUser("anna@sinhub.ru");
+        anna.rename("Анна Петрова");
+        userRepository.save(anna);
+
+        // По ФИО, без учёта регистра, кириллицей.
+        assertThat(search("ПЕТРОВ")).containsExactly(anna.getId());
+        // По почте.
+        assertThat(search("Petrov")).containsExactly(ivan.getId());
+    }
+
+    /** Введённые {@code _} и {@code %} ищутся как символы, а не как шаблон «любой символ». */
+    @Test
+    void wildcardsInQueryAreSearchedLiterally() {
+        User underscored = activeUser("ivan_p@sinhub.ru");
+        activeUser("ivanxp@sinhub.ru");
+
+        assertThat(search("ivan_p")).containsExactly(underscored.getId());
+        assertThat(search("%")).isEmpty();
+    }
+
+    @Test
+    void filtersByStatus() {
+        User blocked = activeUser("blocked@sinhub.ru");
+        activeUser("active@sinhub.ru");
+        admin.block(blocked.getId());
+
+        assertThat(admin.list(null, UserStatus.BLOCKED, PageRequest.of(0, 20)).getContent())
+                .extracting(User::getId).containsExactly(blocked.getId());
+    }
+
+    // ─────────────────────────── правка ───────────────────────────
+
+    @Test
+    void renamesUser() {
+        User ivan = activeUser("ivan@sinhub.ru");
+
+        admin.update(ivan.getId(), "  Иван Сидоров ", null);
+
+        assertThat(reload(ivan).getFullName()).isEqualTo("Иван Сидоров");
+        assertThat(reload(ivan).getEmail().value()).isEqualTo("ivan@sinhub.ru");
+    }
+
+    @Test
+    void changesEmail() {
+        User ivan = activeUser("ivan@sinhub.ru");
+
+        admin.update(ivan.getId(), null, "Ivan.Sidorov@Sinhub.ru");
+
+        assertThat(reload(ivan).getEmail().value()).isEqualTo("ivan.sidorov@sinhub.ru");
+    }
+
+    @Test
+    void refusesEmailOutsideTheCollegeDomain() {
+        User ivan = activeUser("ivan@sinhub.ru");
+
+        assertThatThrownBy(() -> admin.update(ivan.getId(), null, "ivan@gmail.com"))
+                .isInstanceOf(InvalidEmailException.class);
+        assertThat(reload(ivan).getEmail().value()).isEqualTo("ivan@sinhub.ru");
+    }
+
+    @Test
+    void refusesEmailTakenBySomeoneElse() {
+        User ivan = activeUser("ivan@sinhub.ru");
+        activeUser("oleg@sinhub.ru");
+
+        assertThatThrownBy(() -> admin.update(ivan.getId(), null, "oleg@sinhub.ru"))
+                .isInstanceOf(EmailAlreadyTakenException.class);
+    }
+
+    /** Свой же адрес (например, в другом регистре) — не «занят». */
+    @Test
+    void ownEmailIsNotTaken() {
+        User ivan = activeUser("ivan@sinhub.ru");
+
+        admin.update(ivan.getId(), "Иван", "IVAN@sinhub.ru");
+
+        assertThat(reload(ivan).getFullName()).isEqualTo("Иван");
+    }
+
+    private java.util.List<UUID> search(String query) {
+        return admin.list(query, null, PageRequest.of(0, 20)).getContent().stream().map(User::getId).toList();
     }
 
     private User activeUser(String email) {

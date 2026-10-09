@@ -128,6 +128,22 @@ public class User {
         status = restoreTo;
     }
 
+    /** Исправить ФИО — например, опечатку при заведении или смену фамилии. */
+    public void rename(String fullName) {
+        this.fullName = fullName;
+    }
+
+    /**
+     * Сменить почту. Это и логин: войти теперь можно только с новым адресом. {@code sub} в токенах
+     * не меняется — он равен id, а не почте, поэтому сервисы экосистемы ничего не теряют.
+     *
+     * <p>Проверку домена и занятости адреса делает вызывающий ({@code AdminUserService}): у сущности
+     * нет доступа ни к настройкам, ни к другим учёткам.
+     */
+    public void changeEmail(EmailAddress email) {
+        this.email = email;
+    }
+
     /** Отметить успешный вход. */
     public void recordLogin(Instant at) {
         lastLoginAt = at;
