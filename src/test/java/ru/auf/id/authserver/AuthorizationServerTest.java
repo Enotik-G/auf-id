@@ -35,6 +35,7 @@ import java.util.Base64;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.hasItem;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestBuilders.formLogin;
 import static org.springframework.security.test.web.servlet.response.SecurityMockMvcResultMatchers.authenticated;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
@@ -123,6 +124,29 @@ class AuthorizationServerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id_token_signing_alg_values_supported.length()").value(1))
                 .andExpect(jsonPath("$.id_token_signing_alg_values_supported[0]").value("ES256"));
+    }
+
+    /**
+     * Discovery обязан объявлять способ аутентификации {@code none}: вид клиента {@code BROWSER}
+     * (приложение в браузерной вкладке) ходит за токеном без секрета, его защищает PKCE.
+     *
+     * <p>Spring перечисляет только способы с секретом или сертификатом. Строгая библиотека
+     * OIDC-клиента, не найдя в списке своего способа, откажется идти за токеном — поэтому
+     * проверяем. Ошибка того же рода, что RS256 вместо ES256 в тесте выше.
+     */
+    @Test
+    void discoveryAnnouncesThatPublicClientsAreAccepted() throws Exception {
+        mockMvc.perform(get("/.well-known/openid-configuration"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.token_endpoint_auth_methods_supported").value(hasItem("none")));
+    }
+
+    /** Метаданные отдают две ручки, и список способов в них свой у каждой — проверяем обе. */
+    @Test
+    void oauthMetadataAlsoAnnouncesThatPublicClientsAreAccepted() throws Exception {
+        mockMvc.perform(get("/.well-known/oauth-authorization-server"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.token_endpoint_auth_methods_supported").value(hasItem("none")));
     }
 
     @Test
