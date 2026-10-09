@@ -71,20 +71,19 @@ public class RefreshTokenReuseDetector {
      * цепочку.
      *
      * @param tokenHash хеш предъявленного значения
-     * @return {@code true}, если кража распознана и доступ отозван
      */
-    boolean revokeIfReused(String tokenHash) {
+    void revokeIfReused(String tokenHash) {
         String owner = redis.opsForValue().get(key(tokenHash));
         if (owner == null) {
             // Токена не было никогда: опечатка, мусор или подбор. Отзывать нечего.
-            return false;
+            return;
         }
 
         String[] parts = owner.split(SEPARATOR, 2);
         if (parts.length != 2) {
             // Запись испорчена — отзывать наугад хуже, чем не отозвать.
             log.warn("Испорченная запись в реестре погашенных refresh-токенов, отзыв пропущен");
-            return false;
+            return;
         }
 
         int revoked = revoker.revokeAllForClient(parts[0], parts[1]);
@@ -92,7 +91,6 @@ public class RefreshTokenReuseDetector {
         // Полноценный журнал действий — задача 11.
         log.warn("Повторно предъявлен погашенный refresh-токен: доступ пользователя {} у клиента {} отозван"
                 + " ({} авторизаций). Признак кражи токена.", parts[0], parts[1], revoked);
-        return true;
     }
 
     private static String key(String tokenHash) {
