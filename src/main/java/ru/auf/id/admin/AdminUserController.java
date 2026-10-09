@@ -6,6 +6,7 @@ import ru.auf.id.provisioning.Invitation;
 import ru.auf.id.provisioning.ProvisioningService;
 import ru.auf.id.user.EmailAddress;
 import ru.auf.id.user.InvalidEmailException;
+import ru.auf.id.user.WrongUserStatusException;
 import ru.auf.id.user.Role;
 import ru.auf.id.user.UserNotFoundException;
 import io.swagger.v3.oas.annotations.Operation;
@@ -156,9 +157,9 @@ public class AdminUserController {
     }
 
     /** Учётка не в том состоянии: активировать активную, разблокировать незаблокированную и т.п. */
-    @ExceptionHandler(IllegalStateException.class)
+    @ExceptionHandler(WrongUserStatusException.class)
     @ResponseStatus(HttpStatus.CONFLICT)
-    public ProblemDetail wrongState(IllegalStateException e) {
+    public ProblemDetail wrongState(WrongUserStatusException e) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());
     }
 

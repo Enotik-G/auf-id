@@ -92,7 +92,7 @@ public class User {
      */
     public void activate() {
         if (status != UserStatus.INVITED) {
-            throw new IllegalStateException("Активировать можно только учётку в статусе INVITED, сейчас " + status);
+            throw new WrongUserStatusException("Активировать можно только учётку в статусе INVITED, сейчас " + status);
         }
         status = UserStatus.ACTIVE;
     }
@@ -105,7 +105,7 @@ public class User {
      */
     public void block() {
         if (status == UserStatus.DELETED) {
-            throw new IllegalStateException("Удалённую учётку блокировать нечего");
+            throw new WrongUserStatusException("Удалённую учётку блокировать нечего");
         }
         status = UserStatus.BLOCKED;
     }
@@ -119,7 +119,7 @@ public class User {
      */
     public void unblock(UserStatus restoreTo) {
         if (status != UserStatus.BLOCKED) {
-            throw new IllegalStateException("Снять блокировку можно только с BLOCKED, сейчас " + status);
+            throw new WrongUserStatusException("Снять блокировку можно только с BLOCKED, сейчас " + status);
         }
         if (restoreTo != UserStatus.ACTIVE && restoreTo != UserStatus.INVITED) {
             throw new IllegalArgumentException("Вернуть можно только в ACTIVE или INVITED, запрошено " + restoreTo);

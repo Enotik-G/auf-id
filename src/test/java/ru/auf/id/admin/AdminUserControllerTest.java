@@ -9,6 +9,7 @@ import ru.auf.id.user.EmailAddress;
 import ru.auf.id.user.Role;
 import ru.auf.id.user.User;
 import ru.auf.id.user.UserNotFoundException;
+import ru.auf.id.user.WrongUserStatusException;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -21,6 +22,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.util.Set;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
@@ -199,6 +201,31 @@ class AdminUserControllerTest {
                 .andExpect(status().isForbidden());
 
         verifyNoInteractions(adminUsers);
+    }
+
+    /** Действие не подходит к статусу учётки — это конфликт (409) с понятным сообщением. */
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void reportsWrongStatusAsConflict() throws Exception {
+        doThrow(new WrongUserStatusException("Снять блокировку можно только с BLOCKED, сейчас ACTIVE"))
+                .when(adminUsers).unblock(USER_ID);
+
+        mockMvc.perform(post("/api/v1/admin/users/" + USER_ID + "/unblock").with(csrf()))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail").value("Снять блокировку можно только с BLOCKED, сейчас ACTIVE"));
+    }
+
+    /**
+     * Внутренний сбой — не «конфликт»: раньше любой {@code IllegalStateException} (например,
+     * «SHA-256 недоступен») превращался в 409 и выглядел как подсказка администратору.
+     */
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void internalFailureIsNotReportedAsConflict() {
+        doThrow(new IllegalStateException("SHA-256 недоступен в этой JVM")).when(adminUsers).unblock(USER_ID);
+
+        assertThatThrownBy(() -> mockMvc.perform(post("/api/v1/admin/users/" + USER_ID + "/unblock").with(csrf())))
+                .hasRootCauseInstanceOf(IllegalStateException.class);
     }
 
     @Test
