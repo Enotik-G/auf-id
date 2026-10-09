@@ -7,6 +7,7 @@ import org.springframework.security.oauth2.core.OAuth2Token;
 import org.springframework.security.oauth2.core.OAuth2UserCode;
 import org.springframework.security.oauth2.core.endpoint.OAuth2ParameterNames;
 import org.springframework.security.oauth2.core.oidc.OidcIdToken;
+import org.springframework.security.oauth2.core.oidc.StandardClaimNames;
 import org.springframework.security.oauth2.server.authorization.OAuth2Authorization;
 import org.springframework.security.oauth2.server.authorization.OAuth2AuthorizationCode;
 import org.springframework.security.oauth2.server.authorization.OAuth2AuthorizationService;
@@ -15,8 +16,12 @@ import org.springframework.security.oauth2.server.authorization.OAuth2TokenType;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * Хранилище выданных авторизаций, которое кладёт в БД не сами коды и токены, а их хеши SHA-256.
@@ -26,17 +31,18 @@ import java.util.List;
  * восстановить токен, а «предъявить хеш вместо токена» не выйдет — предъявленное значение мы сами
  * хешируем ещё раз.
  *
- * <p><b>Персональные данные это не закрывает.</b> Рядом со значением Spring хранит метаданные
- * токена, а в них — его claims обычным JSON: колонки {@code access_token_metadata} и
- * {@code oidc_id_token_metadata} содержат {@code name} и {@code email} открытым текстом. Выбросить
- * их нельзя: из них {@code /userinfo} отдаёт профиль. Закрывать это надо отдельно — либо собирать
- * {@code /userinfo} из базы пользователей вместо сохранённых claims, либо шифровать колонки
- * (шифрование в документе — фаза 2, нужен Vault).
+ * <p><b>Личные данные тоже убираются</b> (шаг 24). Рядом со значением Spring хранит метаданные
+ * токена, а в них — его claims обычным JSON: в колонках {@code access_token_metadata} и
+ * {@code oidc_id_token_metadata} лежали {@code name} и {@code email} открытым текстом, и
+ * хеширование значений их не закрывало. Теперь перед записью они вырезаются
+ * ({@link #removePersonalClaims}); служебные claims остаются, по ним работают выход и introspection.
+ * Профиль для {@code /userinfo} собирается из таблицы {@code users} ({@code UserClaims.userInfo}).
  *
  * <p>Как работает. Это обёртка: всю работу с таблицей делает стандартный
  * {@code JdbcOAuth2AuthorizationService}, а мы только подменяем значения на входе и на выходе.
  * <ul>
- *   <li>{@link #save} — перед записью заменяет значения всех токенов на {@code sha256:<hex>};</li>
+ *   <li>{@link #save} — перед записью заменяет значения всех токенов на {@code sha256:<hex>}
+ *       и вырезает из их claims личные поля;</li>
  *   <li>{@link #findByToken} — ищет по хешу предъявленного значения, а в найденной авторизации
  *       возвращает на место <b>сырое значение, которое нам только что предъявили</b>. Это важно:
  *       отзыв токена и introspection после поиска сравнивают значения строками
@@ -60,6 +66,10 @@ public class HashedTokenAuthorizationService implements OAuth2AuthorizationServi
 
     private static final OAuth2TokenType STATE = new OAuth2TokenType(OAuth2ParameterNames.STATE);
 
+    /** Claims, которые не должны лежать в БД: это персональные данные, а не работа сервера (шаг 24). */
+    private static final Set<String> PERSONAL_CLAIMS =
+            Set.of(StandardClaimNames.NAME, StandardClaimNames.EMAIL);
+
     /** Все виды токенов, которые Spring может положить в авторизацию. */
     private static final List<Class<? extends OAuth2Token>> TOKEN_CLASSES = List.of(
             OAuth2AuthorizationCode.class,
@@ -81,7 +91,7 @@ public class HashedTokenAuthorizationService implements OAuth2AuthorizationServi
     @Override
     public void save(OAuth2Authorization authorization) {
         rememberRotatedRefreshToken(authorization);
-        delegate.save(withHashedTokens(authorization));
+        delegate.save(forStorage(authorization));
     }
 
     /**
@@ -153,16 +163,60 @@ public class HashedTokenAuthorizationService implements OAuth2AuthorizationServi
         return null;
     }
 
-    /** Копия авторизации, где значения всех токенов заменены на хеши. Метаданные (сроки, claims, «отозван») те же. */
-    private static OAuth2Authorization withHashedTokens(OAuth2Authorization authorization) {
+    /**
+     * Копия авторизации, готовая к записи: значения токенов заменены на хеши, а из их claims убраны
+     * ФИО и почта. Сроки, «отозван» и служебные claims — те же.
+     */
+    private static OAuth2Authorization forStorage(OAuth2Authorization authorization) {
         OAuth2Authorization.Builder builder = OAuth2Authorization.from(authorization);
         for (Class<? extends OAuth2Token> tokenClass : TOKEN_CLASSES) {
             OAuth2Authorization.Token<? extends OAuth2Token> stored = authorization.getToken(tokenClass);
-            if (stored != null && !isHash(stored.getToken().getTokenValue())) {
-                builder.token(withValue(stored.getToken(), hash(stored.getToken().getTokenValue())));
+            if (stored == null) {
+                continue;
             }
+            OAuth2Token token = stored.getToken();
+            String value = token.getTokenValue();
+            // Уже захешированное не хешируем повторно, но claims проверяем у всех токенов:
+            // «значение сырое» и «claims свежие» — разные условия, и совпадают они не всегда.
+            OAuth2Token forStorage = isHash(value) ? token : withValue(token, hash(value));
+            builder.token(forStorage, HashedTokenAuthorizationService::removePersonalClaims);
         }
         return builder.build();
+    }
+
+    /**
+     * Убирает ФИО и почту из claims токена перед записью в БД (шаг 24).
+     *
+     * <p>Рядом со значением токена Spring хранит его claims обычным JSON — в колонках
+     * {@code access_token_metadata} и {@code oidc_id_token_metadata}. Хеширование значений их не
+     * закрывало: войти из дампа нельзя, а прочитать, кто есть кто, — можно.
+     *
+     * <p><b>Убираем только личное.</b> Служебные claims ({@code sub}, {@code aud}, {@code auth_time},
+     * {@code sid} и прочие) остаются: по ним работает выход ({@code /connect/logout} сверяет
+     * {@code aud} и {@code sid}) и introspection. Проверено по исходникам Spring AS 7.1.1 — читают
+     * claims только эти двое, остальные провайдеры их лишь перезаписывают, генерируя токен заново.
+     *
+     * <p>Профиль в {@code /userinfo} от этого не страдает: он собирается из таблицы
+     * {@code users} ({@code UserClaims.userInfo}), а не из сохранённых claims.
+     *
+     * <p>Новая карта оборачивается в {@code unmodifiableMap} намеренно — это <b>тот же класс</b>,
+     * который Spring здесь и хранил. Подменить его на {@code HashMap} значило бы проверять, умеет ли
+     * Jackson восстанавливать новый тип при чтении авторизации обратно; на этом проект уже
+     * спотыкался (см. {@code UserClaims.roleNames}).
+     */
+    private static void removePersonalClaims(Map<String, Object> metadata) {
+        Object claims = metadata.get(OAuth2Authorization.Token.CLAIMS_METADATA_NAME);
+        if (!(claims instanceof Map<?, ?> storedClaims)) {
+            return;
+        }
+
+        Map<String, Object> kept = new HashMap<>();
+        storedClaims.forEach((name, value) -> kept.put(String.valueOf(name), value));
+        if (!kept.keySet().removeAll(PERSONAL_CLAIMS)) {
+            // Личного и не было — не трогаем, чтобы не менять класс карты без нужды.
+            return;
+        }
+        metadata.put(OAuth2Authorization.Token.CLAIMS_METADATA_NAME, Collections.unmodifiableMap(kept));
     }
 
     /** Копия найденной авторизации, где у предъявленного токена вместо хеша снова его настоящее значение. */

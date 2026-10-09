@@ -6,6 +6,7 @@ import org.springframework.security.oauth2.server.authorization.settings.Authori
 import java.time.Duration;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Function;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -16,8 +17,11 @@ import org.springframework.http.MediaType;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
+import org.springframework.security.oauth2.core.oidc.OidcUserInfo;
 import org.springframework.security.oauth2.jose.jws.SignatureAlgorithm;
+import org.springframework.security.oauth2.server.authorization.OAuth2Authorization;
 import org.springframework.security.oauth2.server.authorization.OAuth2AuthorizationServerMetadata;
+import org.springframework.security.oauth2.server.authorization.oidc.authentication.OidcUserInfoAuthenticationContext;
 import org.springframework.security.oauth2.server.authorization.oidc.OidcProviderConfiguration;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
@@ -44,6 +48,7 @@ public class AuthorizationServerConfiguration {
     SecurityFilterChain authorizationServerSecurityFilterChain(
             HttpSecurity http,
             AuthorizationServerSettings authorizationServerSettings,
+            UserClaims userClaims,
             @Value("${auth.cors.allowed-origins:}") List<String> allowedOrigins) throws Exception {
         http
                 .oauth2AuthorizationServer(authorizationServer -> {
@@ -58,11 +63,14 @@ public class AuthorizationServerConfiguration {
                             endpoint.authorizationServerMetadataCustomizer(
                                     AuthorizationServerConfiguration::announcePublicClients));
                     // OpenID Connect: id_token, /userinfo, /.well-known/openid-configuration.
-                    authorizationServer.oidc(oidc -> oidc.providerConfigurationEndpoint(endpoint ->
-                            endpoint.providerConfigurationCustomizer(configuration -> {
-                                announceEs256(configuration);
-                                announcePublicClients(configuration);
-                            })));
+                    authorizationServer.oidc(oidc -> oidc
+                            .providerConfigurationEndpoint(endpoint ->
+                                    endpoint.providerConfigurationCustomizer(configuration -> {
+                                        announceEs256(configuration);
+                                        announcePublicClients(configuration);
+                                    }))
+                            .userInfoEndpoint(endpoint ->
+                                    endpoint.userInfoMapper(profileFromDatabase(userClaims))));
                 })
                 // Браузерные клиенты (SPA) с других адресов обменивают код на токен через fetch —
                 // без CORS-заголовков браузер не отдаст им ответ.
@@ -154,6 +162,28 @@ public class AuthorizationServerConfiguration {
      */
     private static void announcePublicClients(OAuth2AuthorizationServerMetadata.Builder metadata) {
         metadata.tokenEndpointAuthenticationMethod(ClientAuthenticationMethod.NONE.getValue());
+    }
+
+    /**
+     * Откуда {@code /userinfo} берёт профиль: <b>из таблицы {@code users}</b>, а не из claims,
+     * сохранённых при входе (шаг 24).
+     *
+     * <p>По умолчанию Spring отдаёт там поля сохранённого id_token. Из-за этого ФИО и почта лежали
+     * в колонке {@code oidc_id_token_metadata} открытым текстом, и хеширование токенов (шаг 12) их
+     * не закрывало: из дампа БД нельзя было войти, но прочитать, кто есть кто, — можно.
+     *
+     * <p>Права берём те, что выданы при входе ({@code getAuthorizedScopes}), а не те, что в
+     * access-токене: это один и тот же набор, но авторизованные права — первоисточник.
+     *
+     * <p>Проверять токен здесь не нужно — до маппера дело доходит только после того, как Spring
+     * сверил подпись, срок, отзыв и наличие scope {@code openid}.
+     */
+    private static Function<OidcUserInfoAuthenticationContext, OidcUserInfo> profileFromDatabase(
+            UserClaims userClaims) {
+        return context -> {
+            OAuth2Authorization authorization = context.getAuthorization();
+            return userClaims.userInfo(authorization.getPrincipalName(), authorization.getAuthorizedScopes());
+        };
     }
 
     /** Предварительный запрос (OPTIONS) к адресам сервера авторизации, которые читают из JavaScript. */
