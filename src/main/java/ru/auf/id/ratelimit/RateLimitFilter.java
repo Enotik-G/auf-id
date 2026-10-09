@@ -40,7 +40,8 @@ public class RateLimitFilter extends OncePerRequestFilter {
             return;
         }
 
-        // Адрес клиента. За прокси (nginx и т.п.) здесь будет адрес прокси — см. CLAUDE.md, «Заметки».
+        // Адрес клиента. За своим прокси (nginx) Tomcat уже подставил сюда адрес человека из
+        // X-Forwarded-For — но только если прокси в списке доверенных (TRUSTED_PROXIES, шаг 20).
         RateLimiter.Decision decision = rateLimiter.tryAcquire(limit, clientKey(request.getRemoteAddr()));
         if (decision.isAllowed()) {
             chain.doFilter(request, response);

@@ -39,12 +39,16 @@ public class AdminClientController {
     @Operation(
             summary = "Зарегистрировать сервис",
             description = """
-                    Создаёт клиента. Для `CONFIDENTIAL` и `SERVICE` возвращает секрет —
+                    Создаёт клиента. Для `CONFIDENTIAL`, `SERVICE` и `NATIVE` возвращает секрет —
                     **он виден только сейчас**, в базе остаётся только его хеш. Потерялся —
                     выдайте новый через `POST /api/v1/admin/clients/{clientId}/secret`.
 
-                    Refresh-токены пока не выдаются никому: без ротации и выявления повторного
-                    использования это была бы дыра, а не удобство.""")
+                    Секрет `NATIVE` (настольное приложение) спрятать в программе невозможно — он
+                    нужен Spring для обмена refresh-токена, а защищает вход PKCE.
+
+                    Refresh-токены получает только `NATIVE`: живут 30 дней от последнего
+                    обновления, при каждом обновлении выдаётся новый, а повторно предъявленный
+                    старый обрывает всю цепочку (признак кражи).""")
     @ApiResponse(responseCode = "201", description = "Клиент зарегистрирован")
     @ApiResponse(responseCode = "400", description = "Несочетаемые или неполные настройки", content = @Content)
     @ApiResponse(responseCode = "409", description = "Клиент с таким clientId уже есть", content = @Content)

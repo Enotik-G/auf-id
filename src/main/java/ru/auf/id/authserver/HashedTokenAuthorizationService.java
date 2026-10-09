@@ -185,11 +185,7 @@ public class HashedTokenAuthorizationService implements OAuth2AuthorizationServi
     }
 
     /**
-     * Убирает ФИО и почту из claims токена перед записью в БД (шаг 24).
-     *
-     * <p>Рядом со значением токена Spring хранит его claims обычным JSON — в колонках
-     * {@code access_token_metadata} и {@code oidc_id_token_metadata}. Хеширование значений их не
-     * закрывало: войти из дампа нельзя, а прочитать, кто есть кто, — можно.
+     * Убирает ФИО и почту из claims токена перед записью в БД (шаг 24, зачем — в описании класса).
      *
      * <p><b>Убираем только личное.</b> Служебные claims ({@code sub}, {@code aud}, {@code auth_time},
      * {@code sid} и прочие) остаются: по ним работает выход ({@code /connect/logout} сверяет

@@ -74,11 +74,7 @@ public class UserClaims {
 
     /**
      * Профиль для {@code /userinfo} — <b>из таблицы {@code users}</b>, а не из claims, сохранённых
-     * при входе (шаг 24).
-     *
-     * <p>Так Spring делает по умолчанию: берёт поля из сохранённого id_token. Из-за этого ФИО и
-     * почта лежали в колонке {@code oidc_id_token_metadata} открытым текстом, и хеширование токенов
-     * (шаг 12) их не закрывало. Теперь claims там не хранятся, а профиль собирается заново.
+     * при входе (их больше нет, см. {@code HashedTokenAuthorizationService}).
      *
      * <p>Побочный выигрыш: {@code /userinfo} отдаёт данные <b>на текущий момент</b>. Исправили ФИО
      * в админке — следующий запрос вернёт новое, не дожидаясь, пока человек войдёт заново. С
@@ -105,9 +101,8 @@ public class UserClaims {
      * {@code name} при scope {@code profile}, {@code email} и {@code email_verified} при scope
      * {@code email}. Клиент, который scope не запросил, личных данных не получает.
      *
-     * <p>{@code HashMap}, а не {@code Map.of} — по той же причине, что {@code ArrayList} в
-     * {@link #roleNames}: неизменяемые коллекции JDK Jackson не восстанавливает при чтении
-     * авторизации обратно из БД.
+     * <p>Карта нигде не хранится: её сразу переливают в claims токена или в ответ {@code /userinfo}.
+     * {@code HashMap} — просто потому, что поля добавляются по условиям.
      */
     private static Map<String, Object> personalClaims(User user, Set<String> scopes) {
         Map<String, Object> claims = new HashMap<>();
