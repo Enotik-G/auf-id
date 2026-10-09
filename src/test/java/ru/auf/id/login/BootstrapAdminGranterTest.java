@@ -68,6 +68,36 @@ class BootstrapAdminGranterTest {
         assertThat(reload(student).getRoles()).isEmpty();
     }
 
+    /**
+     * Когда администратор уже есть, список больше ничего не выдаёт: иначе роль, снятую через
+     * админку, человек получал бы обратно при каждом входе.
+     */
+    @Test
+    void grantsNothingOnceAnAdminExists() {
+        User existingAdmin = activeUser("anna@sinhub.ru");
+        existingAdmin.grantRole(Role.ADMIN);
+        userRepository.save(existingAdmin);
+        User director = activeUser("director@sinhub.ru");
+
+        granter.onLoginSuccess(loginEventFor(director.getId()));
+
+        assertThat(reload(director).getRoles()).isEmpty();
+    }
+
+    /** Заблокированный админ — не администратор: если других нет, список снова срабатывает. */
+    @Test
+    void blockedAdminDoesNotCountAsExistingAdmin() {
+        User blockedAdmin = activeUser("anna@sinhub.ru");
+        blockedAdmin.grantRole(Role.ADMIN);
+        blockedAdmin.block();
+        userRepository.save(blockedAdmin);
+        User director = activeUser("director@sinhub.ru");
+
+        granter.onLoginSuccess(loginEventFor(director.getId()));
+
+        assertThat(reload(director).hasRole(Role.ADMIN)).isTrue();
+    }
+
     /** Роль добавляется, а не заменяет уже выданные. */
     @Test
     void keepsRolesTheUserAlreadyHas() {
