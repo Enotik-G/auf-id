@@ -406,6 +406,51 @@ class AuthorizationServerTest {
         assertThat(third).isNotBlank().isNotEqualTo(second).isNotEqualTo(first);
     }
 
+    // ───────────────────── заблокированный не получает токенов ─────────────────────
+    //
+    // Блокируем прямо в БД, а не через AdminUserService: тот ещё и удаляет выданные авторизации,
+    // и тест проверял бы удаление, а не саму проверку статуса при выдаче токена.
+
+    /**
+     * Код получен из ещё открытой сессии, а пользователя тем временем заблокировали: обменять код на
+     * токены уже нельзя.
+     */
+    @Test
+    void blockedUserCannotExchangeCodeForTokens() throws Exception {
+        String code = authorize();
+        blockInDatabase();
+
+        mockMvc.perform(post("/oauth2/token")
+                        .with(clientSecret())
+                        .param("grant_type", "authorization_code")
+                        .param("code", code)
+                        .param("redirect_uri", REDIRECT_URI)
+                        .param("client_id", CLIENT_ID)
+                        .param("code_verifier", codeVerifier))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("invalid_grant"));
+    }
+
+    /** Refresh-токен, выданный до блокировки, новых токенов не даёт. */
+    @Test
+    void blockedUserCannotRefreshTokens() throws Exception {
+        String refreshToken = JsonPath.read(exchangeCodeForTokens(authorize()), "$.refresh_token");
+        blockInDatabase();
+
+        mockMvc.perform(post("/oauth2/token")
+                        .with(clientSecret())
+                        .param("grant_type", "refresh_token")
+                        .param("refresh_token", refreshToken))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("invalid_grant"));
+    }
+
+    private void blockInDatabase() {
+        User stored = userRepository.findById(user.getId()).orElseThrow();
+        stored.block();
+        userRepository.save(stored);
+    }
+
     private String refresh(String refreshToken) throws Exception {
         return mockMvc.perform(post("/oauth2/token")
                         .with(clientSecret())
