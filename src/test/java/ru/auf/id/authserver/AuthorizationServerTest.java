@@ -228,9 +228,9 @@ class AuthorizationServerTest {
                         + " FROM oauth2_authorization WHERE principal_name = ?",
                 user.getId().toString());
 
-        assertThat(row.get("authorization_code_value")).isEqualTo(HashedTokenAuthorizationService.hash(code));
-        assertThat(row.get("access_token_value")).isEqualTo(HashedTokenAuthorizationService.hash(accessToken));
-        assertThat(row.get("oidc_id_token_value")).isEqualTo(HashedTokenAuthorizationService.hash(idToken));
+        assertThat(row.get("authorization_code_value")).isEqualTo(HashedTokenAuthorizationService.hashOf(code));
+        assertThat(row.get("access_token_value")).isEqualTo(HashedTokenAuthorizationService.hashOf(accessToken));
+        assertThat(row.get("oidc_id_token_value")).isEqualTo(HashedTokenAuthorizationService.hashOf(idToken));
         assertThat(row.values()).allSatisfy(value -> assertThat((String) value).startsWith("sha256:"));
     }
 
@@ -343,7 +343,7 @@ class AuthorizationServerTest {
                 "SELECT refresh_token_value FROM oauth2_authorization WHERE principal_name = ?",
                 String.class, user.getId().toString());
 
-        assertThat(stored).isEqualTo(HashedTokenAuthorizationService.hash(refreshToken));
+        assertThat(stored).isEqualTo(HashedTokenAuthorizationService.hashOf(refreshToken));
     }
 
     /**
