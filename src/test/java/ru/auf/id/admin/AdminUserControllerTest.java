@@ -184,6 +184,23 @@ class AdminUserControllerTest {
         verify(adminUsers).unblock(USER_ID);
     }
 
+    // ─────────────────────────── защита от CSRF ───────────────────────────
+
+    /**
+     * Админка входит по cookie сессии, поэтому чужая страница могла бы отправить форму от имени
+     * вошедшего админа. Без токена CSRF такой запрос отклоняется, до сервиса дело не доходит.
+     *
+     * <p>Путь с настоящим токеном (cookie → заголовок) — в {@code AdminApiCsrfTest}.
+     */
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void requestWithoutCsrfTokenIsRefused() throws Exception {
+        mockMvc.perform(post("/api/v1/admin/users/" + USER_ID + "/unblock"))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(adminUsers);
+    }
+
     @Test
     @WithMockUser(roles = "ADMIN")
     void reportsLastAdminAsConflict() throws Exception {
