@@ -238,6 +238,16 @@ class LoginTest {
                 .andExpect(redirectedUrl("/login?error"));
     }
 
+    /** Чужой домен с верным паролем — то же общее сообщение, что и для несуществующей почты. */
+    @Test
+    void addressOutsideTheCollegeDomainGivesGeneralError() throws Exception {
+        saveUser("ivan@gmail.com", true);
+
+        mockMvc.perform(formLogin().user("ivan@gmail.com").password(PASSWORD))
+                .andExpect(unauthenticated())
+                .andExpect(redirectedUrl("/login?error"));
+    }
+
     @Test
     void homePageGreetsLoggedInUser() throws Exception {
         User user = saveUser("ivan@sinhub.ru", true);

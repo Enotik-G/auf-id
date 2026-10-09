@@ -1,5 +1,6 @@
 package ru.auf.id.provisioning;
 
+import ru.auf.id.user.AllowedEmailDomains;
 import ru.auf.id.ClockConfiguration;
 import ru.auf.id.TestcontainersConfiguration;
 import ru.auf.id.onetimetoken.OneTimeTokenRepository;
@@ -7,6 +8,7 @@ import ru.auf.id.onetimetoken.InvalidOneTimeTokenException;
 import ru.auf.id.onetimetoken.OneTimeTokenService;
 import ru.auf.id.onetimetoken.TokenPurpose;
 import ru.auf.id.user.EmailAddress;
+import ru.auf.id.user.InvalidEmailException;
 import ru.auf.id.user.PasswordCredentialRepository;
 import ru.auf.id.user.PasswordHasher;
 import ru.auf.id.user.Role;
@@ -26,7 +28,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @DataJpaTest
-@Import({TestcontainersConfiguration.class, ClockConfiguration.class,
+@Import({TestcontainersConfiguration.class, AllowedEmailDomains.class, ClockConfiguration.class,
         ProvisioningService.class, OneTimeTokenService.class, PasswordHasher.class})
 class ProvisioningServiceTest {
 
@@ -62,6 +64,16 @@ class ProvisioningServiceTest {
     }
 
     /** Войти в выданную учётку нельзя, пока владелец не задал пароль по ссылке. */
+    /** Входят только адреса колледжа — учётку с чужим доменом админ создать не может. */
+    @Test
+    void refusesAddressOutsideTheCollegeDomain() {
+        assertThatThrownBy(() -> provisioning.invite(new EmailAddress("ivan@gmail.com"), "Иван", Set.of()))
+                .isInstanceOf(InvalidEmailException.class)
+                .hasMessageContaining("sinhub.ru");
+
+        assertThat(userRepository.count()).isZero();
+    }
+
     @Test
     void createsNoPasswordUpfront() {
         Invitation invitation = provisioning.invite(EMAIL, "Иван Иванов", Set.of());

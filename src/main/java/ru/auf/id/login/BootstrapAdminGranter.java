@@ -1,5 +1,6 @@
 package ru.auf.id.login;
 
+import ru.auf.id.user.AllowedEmailDomains;
 import ru.auf.id.user.EmailAddress;
 import ru.auf.id.user.Role;
 import ru.auf.id.user.User;
@@ -41,12 +42,16 @@ public class BootstrapAdminGranter {
      * тихо превратится в «администратора, который никогда не совпадёт».
      */
     public BootstrapAdminGranter(UserRepository userRepository,
+                                 AllowedEmailDomains allowedDomains,
                                  @Value("${auth.bootstrap.admin-emails:}") List<String> adminEmails) {
         this.userRepository = userRepository;
         this.bootstrapAdmins = adminEmails.stream()
                 .filter(email -> !email.isBlank())
                 .map(EmailAddress::new)
                 .collect(Collectors.toUnmodifiableSet());
+        // Адрес чужого домена войти не сможет, а значит, и роль не получит никогда — лучше узнать
+        // об этом при старте, чем гадать, почему админка не открывается.
+        bootstrapAdmins.forEach(allowedDomains::requireAllowed);
     }
 
     @EventListener

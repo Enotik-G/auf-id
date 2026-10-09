@@ -1,5 +1,6 @@
 package ru.auf.id.login;
 
+import ru.auf.id.user.AllowedEmailDomains;
 import ru.auf.id.TestcontainersConfiguration;
 import ru.auf.id.user.EmailAddress;
 import ru.auf.id.user.PasswordCredential;
@@ -18,7 +19,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @DataJpaTest
-@Import({TestcontainersConfiguration.class, AccountUserDetailsService.class})
+@Import({TestcontainersConfiguration.class, AllowedEmailDomains.class, AccountUserDetailsService.class})
 class AccountUserDetailsServiceTest {
 
     private static final String HASH = "$argon2id$v=19$m=19456,t=2,p=1$c2FsdA$aGFzaA";
@@ -54,6 +55,18 @@ class AccountUserDetailsServiceTest {
     @Test
     void unknownEmailIsNotFound() {
         assertThatThrownBy(() -> service.loadUserByUsername("nobody@sinhub.ru"))
+                .isInstanceOf(UsernameNotFoundException.class);
+    }
+
+    /**
+     * Учётка с чужим доменом в базе — например, созданная до ограничения — войти не может, и
+     * снаружи это неотличимо от несуществующей почты.
+     */
+    @Test
+    void addressOutsideTheCollegeDomainIsNotFound() {
+        saveUser("ivan@gmail.com", true);
+
+        assertThatThrownBy(() -> service.loadUserByUsername("ivan@gmail.com"))
                 .isInstanceOf(UsernameNotFoundException.class);
     }
 

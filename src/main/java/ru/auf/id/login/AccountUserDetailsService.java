@@ -1,5 +1,6 @@
 package ru.auf.id.login;
 
+import ru.auf.id.user.AllowedEmailDomains;
 import ru.auf.id.user.EmailAddress;
 import ru.auf.id.user.InvalidEmailException;
 import ru.auf.id.user.PasswordCredential;
@@ -30,6 +31,7 @@ public class AccountUserDetailsService implements UserDetailsService {
 
     private final UserRepository userRepository;
     private final PasswordCredentialRepository credentialRepository;
+    private final AllowedEmailDomains allowedDomains;
 
     /**
      * @param username то, что человек ввёл в поле логина, — его почта
@@ -68,9 +70,17 @@ public class AccountUserDetailsService implements UserDetailsService {
                 .toList();
     }
 
+    /**
+     * Почта чужого домена ведёт себя как несуществующая: тот же ответ «Неверная почта или пароль»,
+     * и Spring всё так же тратит время на проверку пароля — по ответу не понять, что именно не так.
+     */
     private User findByEmail(String rawEmail) {
         try {
-            return userRepository.findByEmail(new EmailAddress(rawEmail))
+            EmailAddress email = new EmailAddress(rawEmail);
+            if (!allowedDomains.isAllowed(email)) {
+                throw new UsernameNotFoundException("Домен почты не допускается");
+            }
+            return userRepository.findByEmail(email)
                     .orElseThrow(() -> new UsernameNotFoundException("Пользователь не найден"));
         } catch (InvalidEmailException e) {
             throw new UsernameNotFoundException("Пользователь не найден", e);
