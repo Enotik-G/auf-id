@@ -14,7 +14,6 @@ import org.springframework.security.oauth2.server.authorization.settings.ClientS
 import org.springframework.security.oauth2.server.authorization.settings.TokenSettings;
 import org.springframework.stereotype.Component;
 
-import java.time.Duration;
 import java.util.UUID;
 
 /**
@@ -61,11 +60,6 @@ public class DevClientRegistration implements ApplicationRunner {
     static final String PLANNER_CLIENT_ID = "planner-dev";
     static final String PLANNER_REDIRECT_URI = "http://127.0.0.1:5173/auth/callback";
 
-    /** Access token живёт 10 минут: сервисы проверяют его сами, без запроса в Auth (решение архитектуры). */
-    static final Duration ACCESS_TOKEN_LIFETIME = Duration.ofMinutes(10);
-    /** Как у настоящего настольного клиента: 30 дней от последнего обновления (решение 2026-10-08). */
-    static final Duration REFRESH_TOKEN_LIFETIME = Duration.ofDays(30);
-
     /**
      * Секреты dev-клиентов. Лежат в коде открыто намеренно: это клиенты <b>только для разработки</b>
      * (регистрируются при {@code auth.dev-client.enabled=true}, на сервере выключены), а настоящие
@@ -99,11 +93,11 @@ public class DevClientRegistration implements ApplicationRunner {
                 // Обновление access-токена без участия человека — то, без чего лаунчер нежизнеспособен.
                 .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
                 .tokenSettings(TokenSettings.builder()
-                        .accessTokenTimeToLive(ACCESS_TOKEN_LIFETIME)
+                        .accessTokenTimeToLive(TokenLifetimes.ACCESS_TOKEN)
                         // Ротация: каждый обмен выдаёт новый refresh-токен, старый перестаёт работать.
                         // У Spring по умолчанию наоборот (reuseRefreshTokens = true), а срок — 60 минут.
                         .reuseRefreshTokens(false)
-                        .refreshTokenTimeToLive(REFRESH_TOKEN_LIFETIME)
+                        .refreshTokenTimeToLive(TokenLifetimes.REFRESH_TOKEN)
                         .build())
                 .build();
     }
@@ -115,7 +109,7 @@ public class DevClientRegistration implements ApplicationRunner {
                 // Без grant refresh_token: в браузере его украл бы XSS. Вход продлевается
                 // заходом на /oauth2/authorize с prompt=none.
                 .tokenSettings(TokenSettings.builder()
-                        .accessTokenTimeToLive(ACCESS_TOKEN_LIFETIME)
+                        .accessTokenTimeToLive(TokenLifetimes.ACCESS_TOKEN)
                         .build())
                 .build();
     }

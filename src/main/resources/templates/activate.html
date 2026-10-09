@@ -12,16 +12,25 @@
 <body>
 <main class="card">
 
-    <div th:if="${state == 'form' or state == 'weak' or state == 'mismatch'}">
+    <div th:if="${state == 'form' or state == 'weak' or state == 'common' or state == 'mismatch' or state == 'consent'}">
         <h1>Придумайте пароль</h1>
         <p>Аккаунт создан администратором. Задайте пароль — им вы будете входить во все сервисы колледжа.</p>
+        <p class="hint">Не короче <span th:text="${minPasswordLength}">12</span> символов. Проще всего —
+            несколько не связанных слов через пробел: такой пароль легко запомнить и трудно подобрать.</p>
 
         <div class="message error" th:if="${state == 'weak'}" role="alert">
-            Пароль должен быть не короче <span th:text="${minPasswordLength}">8</span> символов
+            Пароль должен быть не короче <span th:text="${minPasswordLength}">12</span> символов
             и не длиннее <span th:text="${maxPasswordLength}">128</span>.
+        </div>
+        <div class="message error" th:if="${state == 'common'}" role="alert">
+            Этот пароль слишком распространён — он есть в списках утёкших паролей, и его подберут
+            первым. Придумайте другой.
         </div>
         <div class="message error" th:if="${state == 'mismatch'}" role="alert">
             Пароли не совпадают.
+        </div>
+        <div class="message error" th:if="${state == 'consent'}" role="alert">
+            Без согласия на обработку персональных данных аккаунт активировать нельзя.
         </div>
 
         <form method="post" th:action="@{/activate}">
@@ -34,6 +43,12 @@
             <label for="passwordConfirmation">Повторите пароль</label>
             <input type="password" id="passwordConfirmation" name="passwordConfirmation"
                    autocomplete="new-password" required>
+
+            <label class="checkbox">
+                <input type="checkbox" name="consent" value="true" required>
+                Я даю <a th:href="@{/consent/personal-data}" target="_blank" rel="noopener">согласие на
+                обработку персональных данных</a>
+            </label>
 
             <button type="submit">Сохранить и активировать</button>
         </form>

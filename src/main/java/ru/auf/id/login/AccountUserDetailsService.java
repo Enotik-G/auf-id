@@ -1,5 +1,6 @@
 package ru.auf.id.login;
 
+import ru.auf.id.user.AllowedEmailDomains;
 import ru.auf.id.user.EmailAddress;
 import ru.auf.id.user.InvalidEmailException;
 import ru.auf.id.user.PasswordCredential;
@@ -8,11 +9,15 @@ import ru.auf.id.user.User;
 import ru.auf.id.user.UserRepository;
 import ru.auf.id.user.UserStatus;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
 
 /**
  * Объясняет Spring Security, где искать пользователя при входе: по почте из формы — в нашей БД.
@@ -22,8 +27,11 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class AccountUserDetailsService implements UserDetailsService {
 
+    static final String ROLE_PREFIX = "ROLE_";
+
     private final UserRepository userRepository;
     private final PasswordCredentialRepository credentialRepository;
+    private final AllowedEmailDomains allowedDomains;
 
     /**
      * @param username то, что человек ввёл в поле логина, — его почта
@@ -40,12 +48,7 @@ public class AccountUserDetailsService implements UserDetailsService {
         return org.springframework.security.core.userdetails.User
                 .withUsername(user.getId().toString())
                 .password(credential.getPasswordHash())
-                // Роли нужны Spring Security в виде полномочий с приставкой ROLE_: именно её ждёт
-                // hasRole("ADMIN"). Без этого правила доступа к админке не сработали бы вовсе —
-                // вошедший администратор выглядел бы как пользователь без единого полномочия.
-                .authorities(user.getRoles().stream()
-                        .map(role -> "ROLE_" + role.name())
-                        .toArray(String[]::new))
+                .authorities(roleAuthorities(user))
                 .disabled(user.getStatus() != UserStatus.ACTIVE && user.getStatus() != UserStatus.LOCKED)
                 // Статус LOCKED в БД — на будущее, ставит администратор. От подбора пароля защищает
                 // не блокировка, а капча (LoginAttemptService) — чужой аккаунт так не заблокировать.
@@ -53,9 +56,31 @@ public class AccountUserDetailsService implements UserDetailsService {
                 .build();
     }
 
+    /**
+     * Роли пользователя в виде полномочий Spring Security — с приставкой {@code ROLE_}: именно её
+     * ждёт {@code hasRole("ADMIN")}. Без этого правила доступа к админке не сработали бы вовсе —
+     * вошедший администратор выглядел бы как пользователь без единого полномочия.
+     *
+     * <p>Нужны и при входе, и при перепроверке уже открытой сессии ({@link SessionUserRevalidationFilter}),
+     * поэтому собраны в одном месте.
+     */
+    static List<GrantedAuthority> roleAuthorities(User user) {
+        return user.getRoles().stream()
+                .map(role -> (GrantedAuthority) new SimpleGrantedAuthority(ROLE_PREFIX + role.name()))
+                .toList();
+    }
+
+    /**
+     * Почта чужого домена ведёт себя как несуществующая: тот же ответ «Неверная почта или пароль»,
+     * и Spring всё так же тратит время на проверку пароля — по ответу не понять, что именно не так.
+     */
     private User findByEmail(String rawEmail) {
         try {
-            return userRepository.findByEmail(new EmailAddress(rawEmail))
+            EmailAddress email = new EmailAddress(rawEmail);
+            if (!allowedDomains.isAllowed(email)) {
+                throw new UsernameNotFoundException("Домен почты не допускается");
+            }
+            return userRepository.findByEmail(email)
                     .orElseThrow(() -> new UsernameNotFoundException("Пользователь не найден"));
         } catch (InvalidEmailException e) {
             throw new UsernameNotFoundException("Пользователь не найден", e);
