@@ -1,5 +1,6 @@
 package ru.auf.id.admin;
 
+import ru.auf.id.user.UserRepository;
 import ru.auf.id.SecurityConfiguration;
 import ru.auf.id.provisioning.EmailAlreadyTakenException;
 import ru.auf.id.provisioning.Invitation;
@@ -36,6 +37,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @WebMvcTest(AdminUserController.class)
 @Import(SecurityConfiguration.class)
 class AdminUserControllerTest {
+
+    /** Нужен фильтру перепроверки сессии, который ставит SecurityConfiguration. */
+    @MockitoBean
+    private UserRepository userRepository;
 
     private static final UUID USER_ID = UUID.fromString("0199bc42-8f31-7a1e-9c55-2b7d4e6a1f90");
     private static final String CREATE_BODY = """
