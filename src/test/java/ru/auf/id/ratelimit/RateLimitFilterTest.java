@@ -39,11 +39,11 @@ class RateLimitFilterTest {
     void twentyFirstLoginAttemptInAMinuteIsRejectedBeforePasswordCheck() throws Exception {
         for (int i = 0; i < 20; i++) {
             // Каждый раз новая почта: здесь проверяем лимит по IP, а не капчу по почте.
-            mockMvc.perform(formLogin().user("guess" + i + "@mail.ru").password("guess " + i))
+            mockMvc.perform(formLogin().user("guess" + i + "@sinhub.ru").password("guess " + i))
                     .andExpect(redirectedUrl("/login?error"));
         }
 
-        mockMvc.perform(formLogin().user("guess21@mail.ru").password("guess 21"))
+        mockMvc.perform(formLogin().user("guess21@sinhub.ru").password("guess 21"))
                 .andExpect(redirectedUrl("/login?tooManyAttempts"))
                 .andExpect(header().exists("Retry-After"));
     }
@@ -52,13 +52,13 @@ class RateLimitFilterTest {
     @Test
     void anotherIpIsNotAffected() throws Exception {
         for (int i = 0; i < 20; i++) {
-            mockMvc.perform(formLogin().user("guess" + i + "@mail.ru").password("guess " + i));
+            mockMvc.perform(formLogin().user("guess" + i + "@sinhub.ru").password("guess " + i));
         }
 
         // formLogin() даёт специализированный билдер без .with(...), поэтому запрос собираем сами:
         // имена полей у него те же, что по умолчанию у Spring Security.
         mockMvc.perform(post("/login")
-                        .param("username", "other@mail.ru")
+                        .param("username", "other@sinhub.ru")
                         .param("password", "guess")
                         .with(csrf())
                         .with(request -> {

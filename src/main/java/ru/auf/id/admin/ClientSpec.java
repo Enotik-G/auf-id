@@ -37,10 +37,10 @@ public record ClientSpec(
         ClientKind kind,
 
         @Schema(description = "Адреса возврата: абсолютные, без фрагмента. Для SERVICE должны быть пустыми.",
-                example = "[\"https://planner.college.ru/callback\"]")
+                example = "[\"https://planner.sinhub.ru/callback\"]")
         Set<String> redirectUris,
 
-        @Schema(description = "Куда вернуть после выхода", example = "[\"https://planner.college.ru/\"]")
+        @Schema(description = "Куда вернуть после выхода", example = "[\"https://planner.sinhub.ru/\"]")
         Set<String> postLogoutRedirectUris,
 
         @Schema(description = "Права. Пусто — openid, profile, email; для SERVICE обязательны.",
