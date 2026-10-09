@@ -26,7 +26,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @DataJpaTest
 @Import({TestcontainersConfiguration.class, BootstrapAdminGranter.class})
 // Нарочно с другим регистром и пробелом: так проверяется нормализация адреса.
-@TestPropertySource(properties = "auth.bootstrap.admin-emails=Director@College.RU, boss@college.ru")
+@TestPropertySource(properties = "auth.bootstrap.admin-emails=Director@Sinhub.RU, boss@sinhub.ru")
 class BootstrapAdminGranterTest {
 
     @Autowired
@@ -40,7 +40,7 @@ class BootstrapAdminGranterTest {
 
     @Test
     void grantsAdminToListedAddressOnLogin() {
-        User director = activeUser("director@college.ru");
+        User director = activeUser("director@sinhub.ru");
 
         granter.onLoginSuccess(loginEventFor(director.getId()));
 
@@ -49,7 +49,7 @@ class BootstrapAdminGranterTest {
 
     @Test
     void matchesAddressRegardlessOfCaseAndSpaces() {
-        User boss = activeUser("boss@college.ru");
+        User boss = activeUser("boss@sinhub.ru");
 
         granter.onLoginSuccess(loginEventFor(boss.getId()));
 
@@ -58,7 +58,7 @@ class BootstrapAdminGranterTest {
 
     @Test
     void doesNotGrantAdminToAnyoneElse() {
-        User student = activeUser("ivan@mail.ru");
+        User student = activeUser("ivan@sinhub.ru");
 
         granter.onLoginSuccess(loginEventFor(student.getId()));
 
@@ -68,7 +68,7 @@ class BootstrapAdminGranterTest {
     /** Роль добавляется, а не заменяет уже выданные. */
     @Test
     void keepsRolesTheUserAlreadyHas() {
-        User director = activeUser("director@college.ru");
+        User director = activeUser("director@sinhub.ru");
         director.grantRole(Role.CURATOR);
         userRepository.save(director);
 
@@ -79,7 +79,7 @@ class BootstrapAdminGranterTest {
 
     @Test
     void grantingTwiceLeavesOneRole() {
-        User director = activeUser("director@college.ru");
+        User director = activeUser("director@sinhub.ru");
 
         granter.onLoginSuccess(loginEventFor(director.getId()));
         granter.onLoginSuccess(loginEventFor(director.getId()));

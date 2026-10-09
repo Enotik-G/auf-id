@@ -71,70 +71,70 @@ class LoginTest {
 
     @Test
     void wrongPasswordsNoLongerLockTheAccount() throws Exception {
-        saveUser("ivan@mail.ru", true);
-        wrongPasswordTimes("ivan@mail.ru", 10);
+        saveUser("ivan@sinhub.ru", true);
+        wrongPasswordTimes("ivan@sinhub.ru", 10);
 
         // Блокировки больше нет (её заменила капча): чужой аккаунт так не закрыть —
         // владелец решит капчу и войдёт.
-        mockMvc.perform(loginWithCaptcha("ivan@mail.ru", PASSWORD, CaptchaTestSupport.solve(captchaService.createChallenge())))
+        mockMvc.perform(loginWithCaptcha("ivan@sinhub.ru", PASSWORD, CaptchaTestSupport.solve(captchaService.createChallenge())))
                 .andExpect(authenticated());
     }
 
     @Test
     void threeWrongPasswordsMakeCaptchaRequired() throws Exception {
-        saveUser("ivan@mail.ru", true);
-        wrongPasswordTimes("Ivan@Mail.ru", 3);
+        saveUser("ivan@sinhub.ru", true);
+        wrongPasswordTimes("Ivan@Sinhub.ru", 3);
 
-        assertThat(loginAttempts.isCaptchaRequired(new EmailAddress("ivan@mail.ru"))).isTrue();
+        assertThat(loginAttempts.isCaptchaRequired(new EmailAddress("ivan@sinhub.ru"))).isTrue();
     }
 
     /** Главное свойство счётчика: для выдуманной почты — ровно то же, что для настоящей. */
     @Test
     void unknownEmailGetsCaptchaTheSameWay() throws Exception {
-        wrongPasswordTimes("nobody@mail.ru", 3);
+        wrongPasswordTimes("nobody@sinhub.ru", 3);
 
-        assertThat(loginAttempts.isCaptchaRequired(new EmailAddress("nobody@mail.ru"))).isTrue();
+        assertThat(loginAttempts.isCaptchaRequired(new EmailAddress("nobody@sinhub.ru"))).isTrue();
     }
 
     @Test
     void successfulLoginResetsFailureCount() throws Exception {
-        saveUser("ivan@mail.ru", true);
-        wrongPasswordTimes("ivan@mail.ru", 3);
+        saveUser("ivan@sinhub.ru", true);
+        wrongPasswordTimes("ivan@sinhub.ru", 3);
 
-        mockMvc.perform(loginWithCaptcha("ivan@mail.ru", PASSWORD, CaptchaTestSupport.solve(captchaService.createChallenge())))
+        mockMvc.perform(loginWithCaptcha("ivan@sinhub.ru", PASSWORD, CaptchaTestSupport.solve(captchaService.createChallenge())))
                 .andExpect(authenticated());
 
-        assertThat(loginAttempts.isCaptchaRequired(new EmailAddress("ivan@mail.ru"))).isFalse();
+        assertThat(loginAttempts.isCaptchaRequired(new EmailAddress("ivan@sinhub.ru"))).isFalse();
     }
 
     @Test
     void afterThreeFailuresCorrectPasswordWithoutCaptchaIsNotEnough() throws Exception {
-        saveUser("ivan@mail.ru", true);
-        wrongPasswordTimes("ivan@mail.ru", 3);
+        saveUser("ivan@sinhub.ru", true);
+        wrongPasswordTimes("ivan@sinhub.ru", 3);
 
-        mockMvc.perform(formLogin().user("ivan@mail.ru").password(PASSWORD))
+        mockMvc.perform(formLogin().user("ivan@sinhub.ru").password(PASSWORD))
                 .andExpect(unauthenticated())
                 .andExpect(redirectedUrl("/login?captcha"));
     }
 
     @Test
     void afterThreeFailuresCorrectPasswordWithSolvedCaptchaLogsIn() throws Exception {
-        saveUser("ivan@mail.ru", true);
-        wrongPasswordTimes("ivan@mail.ru", 3);
+        saveUser("ivan@sinhub.ru", true);
+        wrongPasswordTimes("ivan@sinhub.ru", 3);
 
-        mockMvc.perform(loginWithCaptcha("ivan@mail.ru", PASSWORD, CaptchaTestSupport.solve(captchaService.createChallenge())))
+        mockMvc.perform(loginWithCaptcha("ivan@sinhub.ru", PASSWORD, CaptchaTestSupport.solve(captchaService.createChallenge())))
                 .andExpect(authenticated());
     }
 
     @Test
     void usedCaptchaSolutionDoesNotWorkTwice() throws Exception {
-        saveUser("ivan@mail.ru", true);
-        wrongPasswordTimes("ivan@mail.ru", 3);
+        saveUser("ivan@sinhub.ru", true);
+        wrongPasswordTimes("ivan@sinhub.ru", 3);
         String solution = CaptchaTestSupport.solve(captchaService.createChallenge());
-        mockMvc.perform(loginWithCaptcha("ivan@mail.ru", "wrong password", solution))
+        mockMvc.perform(loginWithCaptcha("ivan@sinhub.ru", "wrong password", solution))
                 .andExpect(redirectedUrl("/login?error"));
 
-        mockMvc.perform(loginWithCaptcha("ivan@mail.ru", PASSWORD, solution))
+        mockMvc.perform(loginWithCaptcha("ivan@sinhub.ru", PASSWORD, solution))
                 .andExpect(unauthenticated())
                 .andExpect(redirectedUrl("/login?captcha"));
     }
@@ -142,9 +142,9 @@ class LoginTest {
     /** Для выдуманной почты — ровно то же требование: по капче не понять, есть ли аккаунт. */
     @Test
     void unknownEmailAlsoRequiresCaptchaAfterThreeFailures() throws Exception {
-        wrongPasswordTimes("nobody@mail.ru", 3);
+        wrongPasswordTimes("nobody@sinhub.ru", 3);
 
-        mockMvc.perform(formLogin().user("nobody@mail.ru").password(PASSWORD))
+        mockMvc.perform(formLogin().user("nobody@sinhub.ru").password(PASSWORD))
                 .andExpect(redirectedUrl("/login?captcha"));
     }
 
@@ -172,18 +172,18 @@ class LoginTest {
 
     @Test
     void activeUserLogsInIsIdentifiedByIdAndGoesToHomePage() throws Exception {
-        User user = saveUser("ivan@mail.ru", true);
+        User user = saveUser("ivan@sinhub.ru", true);
 
-        mockMvc.perform(formLogin().user("Ivan@Mail.ru").password(PASSWORD))
+        mockMvc.perform(formLogin().user("Ivan@Sinhub.ru").password(PASSWORD))
                 .andExpect(authenticated().withUsername(user.getId().toString()))
                 .andExpect(redirectedUrl("/"));
     }
 
     @Test
     void successfulLoginIsRecorded() throws Exception {
-        User user = saveUser("ivan@mail.ru", true);
+        User user = saveUser("ivan@sinhub.ru", true);
 
-        mockMvc.perform(formLogin().user("ivan@mail.ru").password(PASSWORD))
+        mockMvc.perform(formLogin().user("ivan@sinhub.ru").password(PASSWORD))
                 .andExpect(authenticated());
 
         assertThat(userRepository.findById(user.getId()).orElseThrow().getLastLoginAt()).isNotNull();
@@ -191,9 +191,9 @@ class LoginTest {
 
     @Test
     void failedLoginIsNotRecorded() throws Exception {
-        User user = saveUser("ivan@mail.ru", true);
+        User user = saveUser("ivan@sinhub.ru", true);
 
-        mockMvc.perform(formLogin().user("ivan@mail.ru").password("wrong password"))
+        mockMvc.perform(formLogin().user("ivan@sinhub.ru").password("wrong password"))
                 .andExpect(unauthenticated());
 
         assertThat(userRepository.findById(user.getId()).orElseThrow().getLastLoginAt()).isNull();
@@ -201,20 +201,20 @@ class LoginTest {
 
     @Test
     void wrongPasswordGivesGeneralError() throws Exception {
-        saveUser("ivan@mail.ru", true);
+        saveUser("ivan@sinhub.ru", true);
 
-        mockMvc.perform(formLogin().user("ivan@mail.ru").password("wrong password"))
+        mockMvc.perform(formLogin().user("ivan@sinhub.ru").password("wrong password"))
                 .andExpect(unauthenticated())
                 .andExpect(redirectedUrl("/login?error"));
     }
 
     @Test
     void blockedAccountWithCorrectPasswordGetsHint() throws Exception {
-        User user = saveUser("ivan@mail.ru", true);
+        User user = saveUser("ivan@sinhub.ru", true);
         user.block();
         userRepository.save(user);
 
-        mockMvc.perform(formLogin().user("ivan@mail.ru").password(PASSWORD))
+        mockMvc.perform(formLogin().user("ivan@sinhub.ru").password(PASSWORD))
                 .andExpect(unauthenticated())
                 .andExpect(redirectedUrl("/login?blocked"));
     }
@@ -222,30 +222,30 @@ class LoginTest {
     /** Главная проверка безопасности этой задачи: без пароля статус чужой почты не узнать. */
     @Test
     void blockedAccountWithWrongPasswordLooksLikeAnyOtherError() throws Exception {
-        User user = saveUser("ivan@mail.ru", true);
+        User user = saveUser("ivan@sinhub.ru", true);
         user.block();
         userRepository.save(user);
 
-        mockMvc.perform(formLogin().user("ivan@mail.ru").password("wrong password"))
+        mockMvc.perform(formLogin().user("ivan@sinhub.ru").password("wrong password"))
                 .andExpect(unauthenticated())
                 .andExpect(redirectedUrl("/login?error"));
     }
 
     @Test
     void unknownEmailGivesGeneralError() throws Exception {
-        mockMvc.perform(formLogin().user("nobody@mail.ru").password(PASSWORD))
+        mockMvc.perform(formLogin().user("nobody@sinhub.ru").password(PASSWORD))
                 .andExpect(unauthenticated())
                 .andExpect(redirectedUrl("/login?error"));
     }
 
     @Test
     void homePageGreetsLoggedInUser() throws Exception {
-        User user = saveUser("ivan@mail.ru", true);
+        User user = saveUser("ivan@sinhub.ru", true);
 
         mockMvc.perform(get("/").with(user(user.getId().toString())))
                 .andExpect(status().isOk())
                 .andExpect(content().string(containsString("Здравствуйте, Иван Петров!")))
-                .andExpect(content().string(containsString("ivan@mail.ru")));
+                .andExpect(content().string(containsString("ivan@sinhub.ru")));
     }
 
     @Test

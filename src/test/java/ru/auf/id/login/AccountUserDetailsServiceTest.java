@@ -34,9 +34,9 @@ class AccountUserDetailsServiceTest {
 
     @Test
     void activeUserIsFoundByEmailAndNamedById() {
-        User user = saveUser("ivan@mail.ru", true);
+        User user = saveUser("ivan@sinhub.ru", true);
 
-        UserDetails details = service.loadUserByUsername("  IVAN@Mail.ru ");
+        UserDetails details = service.loadUserByUsername("  IVAN@Sinhub.ru ");
 
         assertThat(details.getUsername()).isEqualTo(user.getId().toString());
         assertThat(details.getPassword()).isEqualTo(HASH);
@@ -46,14 +46,14 @@ class AccountUserDetailsServiceTest {
 
     @Test
     void userWhoDidNotConfirmEmailIsDisabled() {
-        saveUser("ivan@mail.ru", false);
+        saveUser("ivan@sinhub.ru", false);
 
-        assertThat(service.loadUserByUsername("ivan@mail.ru").isEnabled()).isFalse();
+        assertThat(service.loadUserByUsername("ivan@sinhub.ru").isEnabled()).isFalse();
     }
 
     @Test
     void unknownEmailIsNotFound() {
-        assertThatThrownBy(() -> service.loadUserByUsername("nobody@mail.ru"))
+        assertThatThrownBy(() -> service.loadUserByUsername("nobody@sinhub.ru"))
                 .isInstanceOf(UsernameNotFoundException.class);
     }
 
@@ -69,12 +69,12 @@ class AccountUserDetailsServiceTest {
      */
     @Test
     void rolesBecomeAuthoritiesWithRolePrefix() {
-        User user = saveUser("boss@college.ru", true);
+        User user = saveUser("boss@sinhub.ru", true);
         user.grantRole(Role.ADMIN);
         user.grantRole(Role.CURATOR);
         userRepository.save(user);
 
-        UserDetails details = service.loadUserByUsername("boss@college.ru");
+        UserDetails details = service.loadUserByUsername("boss@sinhub.ru");
 
         assertThat(details.getAuthorities())
                 .extracting(Object::toString)
@@ -83,9 +83,9 @@ class AccountUserDetailsServiceTest {
 
     @Test
     void userWithoutRolesHasNoAuthorities() {
-        saveUser("ivan@mail.ru", true);
+        saveUser("ivan@sinhub.ru", true);
 
-        assertThat(service.loadUserByUsername("ivan@mail.ru").getAuthorities()).isEmpty();
+        assertThat(service.loadUserByUsername("ivan@sinhub.ru").getAuthorities()).isEmpty();
     }
 
     private User saveUser(String email, boolean confirmed) {

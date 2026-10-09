@@ -61,7 +61,7 @@ class AuthorizationServerTest {
     private static final String CLIENT_ID = DevClientRegistration.LAUNCHER_CLIENT_ID;
     private static final String REDIRECT_URI = "http://127.0.0.1:8090/login/oauth2/code/auth";
 
-    private static final String EMAIL = "ivan@mail.ru";
+    private static final String EMAIL = "ivan@sinhub.ru";
     private static final String PASSWORD = "correct horse battery staple";
 
     /** PKCE: секрет, который знает только клиент; в запрос на вход уходит его хеш (challenge). */
@@ -237,7 +237,7 @@ class AuthorizationServerTest {
      * В строке авторизации не остаётся ни ФИО, ни почты (шаг 24).
      *
      * <p>Шаг 12 захешировал значения токенов, но claims Spring хранит рядом обычным JSON — и до
-     * шага 24 в колонках {@code *_metadata} лежало «Иван Петров» и {@code ivan@mail.ru}. Зонд по
+     * шага 24 в колонках {@code *_metadata} лежало «Иван Петров» и {@code ivan@sinhub.ru}. Зонд по
      * <b>всем</b> колонкам: так проверка не зависит от того, в какую именно их положит Spring.
      */
     @Test

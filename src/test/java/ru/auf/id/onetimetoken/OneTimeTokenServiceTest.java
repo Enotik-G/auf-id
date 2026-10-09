@@ -34,7 +34,7 @@ class OneTimeTokenServiceTest {
 
     @BeforeEach
     void createUser() {
-        user = userRepository.save(User.invited(new EmailAddress("ivan@mail.ru"), "Иван Петров"));
+        user = userRepository.save(User.invited(new EmailAddress("ivan@sinhub.ru"), "Иван Петров"));
     }
 
     @Test
@@ -129,7 +129,7 @@ class OneTimeTokenServiceTest {
 
     @Test
     void revokeAllTouchesOnlyTheGivenUser() {
-        User another = userRepository.save(User.invited(new EmailAddress("oleg@mail.ru"), "Олег Сидоров"));
+        User another = userRepository.save(User.invited(new EmailAddress("oleg@sinhub.ru"), "Олег Сидоров"));
         OneTimeTokenService service = serviceAt(ISSUED_AT);
         String othersToken = service.issue(another, TokenPurpose.INVITE);
         service.issue(user, TokenPurpose.INVITE);

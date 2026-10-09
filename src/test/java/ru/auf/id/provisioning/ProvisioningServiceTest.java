@@ -30,7 +30,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
         ProvisioningService.class, OneTimeTokenService.class, PasswordHasher.class})
 class ProvisioningServiceTest {
 
-    private static final EmailAddress EMAIL = new EmailAddress("student@college.ru");
+    private static final EmailAddress EMAIL = new EmailAddress("student@sinhub.ru");
 
     @Autowired
     private ProvisioningService provisioning;
@@ -113,7 +113,7 @@ class ProvisioningServiceTest {
     void refusesEmailTakenInAnotherLetterCase() {
         provisioning.invite(EMAIL, "Иван Иванов", Set.of());
 
-        assertThatThrownBy(() -> provisioning.invite(new EmailAddress("Student@College.RU"), "Иван", Set.of()))
+        assertThatThrownBy(() -> provisioning.invite(new EmailAddress("Student@Sinhub.RU"), "Иван", Set.of()))
                 .isInstanceOf(EmailAlreadyTakenException.class);
     }
 
