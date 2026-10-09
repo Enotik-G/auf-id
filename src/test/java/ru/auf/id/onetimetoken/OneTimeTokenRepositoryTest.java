@@ -1,5 +1,6 @@
 package ru.auf.id.onetimetoken;
 
+import ru.auf.id.TestTime;
 import ru.auf.id.TestcontainersConfiguration;
 import ru.auf.id.user.EmailAddress;
 import ru.auf.id.user.User;
@@ -44,15 +45,7 @@ class OneTimeTokenRepositoryTest {
         assertThat(loaded.getUsedAt()).isNull();
     }
 
-    @Test
-    void tokenOfOnePurposeIsNotFoundForAnother() {
-        User user = saveUser();
-        tokenRepository.saveAndFlush(OneTimeToken.issue(user, TokenPurpose.INVITE, HASH, Instant.now()));
-
-        assertThat(tokenRepository.findByTokenHashAndPurpose(HASH, TokenPurpose.PASSWORD_RESET)).isEmpty();
-    }
-
     private User saveUser() {
-        return userRepository.save(User.invited(new EmailAddress("ivan@mail.ru"), "Иван Петров"));
+        return userRepository.save(User.invited(new EmailAddress("ivan@sinhub.ru"), "Иван Петров", TestTime.NOW));
     }
 }

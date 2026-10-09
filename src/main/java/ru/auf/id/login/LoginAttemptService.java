@@ -1,15 +1,12 @@
 package ru.auf.id.login;
 
+import ru.auf.id.Sha256;
 import ru.auf.id.user.EmailAddress;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
-import java.nio.charset.StandardCharsets;
-import java.security.GeneralSecurityException;
-import java.security.MessageDigest;
 import java.time.Duration;
-import java.util.HexFormat;
 
 /**
  * Защита от подбора пароля: после {@value #CAPTCHA_THRESHOLD} неверных паролей подряд к одной почте
@@ -51,11 +48,6 @@ public class LoginAttemptService {
      * (меньше персональных данных — меньше проблем, если кто-то заглянет в Redis).
      */
     private static String failuresKey(EmailAddress email) {
-        try {
-            byte[] digest = MessageDigest.getInstance("SHA-256").digest(email.value().getBytes(StandardCharsets.UTF_8));
-            return "login:failures:" + HexFormat.of().formatHex(digest);
-        } catch (GeneralSecurityException e) {
-            throw new IllegalStateException("SHA-256 недоступен в этой JVM", e);
-        }
+        return "login:failures:" + Sha256.hex(email.value());
     }
 }

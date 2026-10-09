@@ -74,13 +74,13 @@ public class User {
      * доказывал, а доступа к самому ящику у студентов нет — проверять нечем. Значит честный ответ
      * «нет». Сервисам экосистемы на это поле опираться нельзя.
      */
-    public static User invited(EmailAddress email, String fullName) {
+    public static User invited(EmailAddress email, String fullName, Instant createdAt) {
         User user = new User();
         user.email = email;
         user.fullName = fullName;
         user.emailVerified = false;
         user.status = UserStatus.INVITED;
-        user.createdAt = Instant.now();
+        user.createdAt = createdAt;
         return user;
     }
 
@@ -92,7 +92,7 @@ public class User {
      */
     public void activate() {
         if (status != UserStatus.INVITED) {
-            throw new IllegalStateException("Активировать можно только учётку в статусе INVITED, сейчас " + status);
+            throw new WrongUserStatusException("Активировать можно только учётку в статусе INVITED, сейчас " + status);
         }
         status = UserStatus.ACTIVE;
     }
@@ -100,12 +100,13 @@ public class User {
     /**
      * Заблокировать доступ. Возможно из любого состояния, кроме удалённого.
      *
-     * <p>Уже выданные access-токены продолжат работать до истечения (до 10 минут) — их отзыв
-     * относится к серверу авторизации и делается отдельно (задача 3.5).
+     * <p>Уже выданные access-токены продолжат работать до истечения (до 10 минут): сервисы проверяют
+     * их сами. Остальное — отзыв выданных авторизаций, закрытие открытой сессии — делают
+     * {@code AdminUserService.block} и {@code SessionUserRevalidationFilter}.
      */
     public void block() {
         if (status == UserStatus.DELETED) {
-            throw new IllegalStateException("Удалённую учётку блокировать нечего");
+            throw new WrongUserStatusException("Удалённую учётку блокировать нечего");
         }
         status = UserStatus.BLOCKED;
     }
@@ -119,7 +120,7 @@ public class User {
      */
     public void unblock(UserStatus restoreTo) {
         if (status != UserStatus.BLOCKED) {
-            throw new IllegalStateException("Снять блокировку можно только с BLOCKED, сейчас " + status);
+            throw new WrongUserStatusException("Снять блокировку можно только с BLOCKED, сейчас " + status);
         }
         if (restoreTo != UserStatus.ACTIVE && restoreTo != UserStatus.INVITED) {
             throw new IllegalArgumentException("Вернуть можно только в ACTIVE или INVITED, запрошено " + restoreTo);

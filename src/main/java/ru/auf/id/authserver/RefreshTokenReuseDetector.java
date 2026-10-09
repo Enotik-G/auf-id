@@ -38,12 +38,13 @@ import java.time.Duration;
 public class RefreshTokenReuseDetector {
 
     /**
-     * Сколько помним погашенный токен — столько же, сколько живёт сам refresh-токен.
+     * Сколько помним погашенный токен — ровно столько, сколько живёт сам refresh-токен.
      *
      * <p>Дольше незачем: токен старше этого срока истёк бы и так, и предъявить его нельзя.
-     * Короче опасно: забыв о токене раньше, чем он истёк, мы перестали бы узнавать кражу.
+     * Короче опасно: забыв о токене раньше, чем он истёк, мы перестали бы узнавать кражу. Поэтому
+     * это не своё число, а ссылка на общий срок.
      */
-    static final Duration MEMORY = Duration.ofDays(30);
+    static final Duration REMEMBER_SPENT_TOKEN_FOR = TokenLifetimes.REFRESH_TOKEN;
 
     /**
      * Разделитель владельца и клиента в значении. Пробел безопасен: оба — UUID строкой, пробелов
@@ -62,7 +63,7 @@ public class RefreshTokenReuseDetector {
      * @param registeredClientId  внутренний id клиента ({@code oauth2_registered_client.id})
      */
     void remember(String tokenHash, String principalName, String registeredClientId) {
-        redis.opsForValue().set(key(tokenHash), principalName + SEPARATOR + registeredClientId, MEMORY);
+        redis.opsForValue().set(key(tokenHash), principalName + SEPARATOR + registeredClientId, REMEMBER_SPENT_TOKEN_FOR);
     }
 
     /**
@@ -70,20 +71,19 @@ public class RefreshTokenReuseDetector {
      * цепочку.
      *
      * @param tokenHash хеш предъявленного значения
-     * @return {@code true}, если кража распознана и доступ отозван
      */
-    boolean revokeIfReused(String tokenHash) {
+    void revokeIfReused(String tokenHash) {
         String owner = redis.opsForValue().get(key(tokenHash));
         if (owner == null) {
             // Токена не было никогда: опечатка, мусор или подбор. Отзывать нечего.
-            return false;
+            return;
         }
 
         String[] parts = owner.split(SEPARATOR, 2);
         if (parts.length != 2) {
             // Запись испорчена — отзывать наугад хуже, чем не отозвать.
             log.warn("Испорченная запись в реестре погашенных refresh-токенов, отзыв пропущен");
-            return false;
+            return;
         }
 
         int revoked = revoker.revokeAllForClient(parts[0], parts[1]);
@@ -91,7 +91,6 @@ public class RefreshTokenReuseDetector {
         // Полноценный журнал действий — задача 11.
         log.warn("Повторно предъявлен погашенный refresh-токен: доступ пользователя {} у клиента {} отозван"
                 + " ({} авторизаций). Признак кражи токена.", parts[0], parts[1], revoked);
-        return true;
     }
 
     private static String key(String tokenHash) {

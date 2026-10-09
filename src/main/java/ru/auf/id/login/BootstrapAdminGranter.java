@@ -1,5 +1,6 @@
 package ru.auf.id.login;
 
+import ru.auf.id.user.AllowedEmailDomains;
 import ru.auf.id.user.EmailAddress;
 import ru.auf.id.user.Role;
 import ru.auf.id.user.User;
@@ -26,8 +27,10 @@ import java.util.stream.Collectors;
  * тогда настройку пришлось бы применять повторным перезапуском. Вход — первый момент, когда точно
  * известно, что аккаунт есть и принадлежит владельцу адреса.
  *
- * <p>Запись в список никогда не отнимает роль и не касается никого другого: снять роль можно только
- * через админку. Пустая настройка полностью отключает механизм.
+ * <p>Срабатывает, только пока в системе нет ни одного действующего администратора: первый вошедший
+ * из списка становится админом, остальных он назначит сам через админку. Поэтому снятая через
+ * админку роль не возвращается при следующем входе. Запись в список никогда не отнимает роль и не
+ * касается никого другого. Пустая настройка полностью отключает механизм.
  */
 @Component
 public class BootstrapAdminGranter {
@@ -41,12 +44,16 @@ public class BootstrapAdminGranter {
      * тихо превратится в «администратора, который никогда не совпадёт».
      */
     public BootstrapAdminGranter(UserRepository userRepository,
+                                 AllowedEmailDomains allowedDomains,
                                  @Value("${auth.bootstrap.admin-emails:}") List<String> adminEmails) {
         this.userRepository = userRepository;
         this.bootstrapAdmins = adminEmails.stream()
                 .filter(email -> !email.isBlank())
                 .map(EmailAddress::new)
                 .collect(Collectors.toUnmodifiableSet());
+        // Адрес чужого домена войти не сможет, а значит, и роль не получит никогда — лучше узнать
+        // об этом при старте, чем гадать, почему админка не открывается.
+        bootstrapAdmins.forEach(allowedDomains::requireAllowed);
     }
 
     @EventListener
@@ -64,8 +71,13 @@ public class BootstrapAdminGranter {
         userRepository.findById(userId).ifPresent(this::grantIfListed);
     }
 
+    /**
+     * Роль выдаётся, только пока в системе нет ни одного действующего администратора. Иначе
+     * снять её через админку было бы невозможно: при следующем же входе она вернулась бы, пока
+     * адрес остаётся в настройке.
+     */
     private void grantIfListed(User user) {
-        if (bootstrapAdmins.contains(user.getEmail())) {
+        if (bootstrapAdmins.contains(user.getEmail()) && userRepository.countUsableWithRole(Role.ADMIN) == 0) {
             user.grantRole(Role.ADMIN);
         }
     }
