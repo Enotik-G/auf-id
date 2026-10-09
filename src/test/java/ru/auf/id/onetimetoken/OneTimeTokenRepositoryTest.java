@@ -1,5 +1,6 @@
 package ru.auf.id.onetimetoken;
 
+import ru.auf.id.TestTime;
 import ru.auf.id.TestcontainersConfiguration;
 import ru.auf.id.user.EmailAddress;
 import ru.auf.id.user.User;
@@ -45,6 +46,6 @@ class OneTimeTokenRepositoryTest {
     }
 
     private User saveUser() {
-        return userRepository.save(User.invited(new EmailAddress("ivan@sinhub.ru"), "Иван Петров"));
+        return userRepository.save(User.invited(new EmailAddress("ivan@sinhub.ru"), "Иван Петров", TestTime.NOW));
     }
 }

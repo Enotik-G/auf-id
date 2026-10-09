@@ -1,5 +1,6 @@
 package ru.auf.id.admin;
 
+import ru.auf.id.TestTime;
 import ru.auf.id.user.UserRepository;
 import ru.auf.id.SecurityConfiguration;
 import ru.auf.id.provisioning.EmailAlreadyTakenException;
@@ -153,7 +154,7 @@ class AdminUserControllerTest {
     @Test
     @WithMockUser(roles = "ADMIN")
     void showsUser() throws Exception {
-        User user = User.invited(new EmailAddress("ivan@sinhub.ru"), "Иван Петров");
+        User user = User.invited(new EmailAddress("ivan@sinhub.ru"), "Иван Петров", TestTime.NOW);
         user.grantRole(Role.STUDENT);
         when(adminUsers.get(USER_ID)).thenReturn(user);
 

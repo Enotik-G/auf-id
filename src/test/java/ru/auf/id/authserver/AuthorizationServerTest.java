@@ -1,5 +1,6 @@
 package ru.auf.id.authserver;
 
+import ru.auf.id.TestTime;
 import ru.auf.id.TestcontainersConfiguration;
 import ru.auf.id.user.EmailAddress;
 import ru.auf.id.user.PasswordCredential;
@@ -89,10 +90,10 @@ class AuthorizationServerTest {
 
     @BeforeEach
     void createActiveUser() {
-        user = User.invited(new EmailAddress(EMAIL), "Иван Петров");
+        user = User.invited(new EmailAddress(EMAIL), "Иван Петров", TestTime.NOW);
         user.activate();
         userRepository.save(user);
-        credentialRepository.save(PasswordCredential.forUser(user, passwordHasher.hash(PASSWORD)));
+        credentialRepository.save(PasswordCredential.forUser(user, passwordHasher.hash(PASSWORD), TestTime.NOW));
     }
 
     @Autowired

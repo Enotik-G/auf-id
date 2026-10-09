@@ -1,5 +1,6 @@
 package ru.auf.id.user;
 
+import ru.auf.id.TestTime;
 import ru.auf.id.TestcontainersConfiguration;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,7 +26,7 @@ class UserRepositoryTest {
 
     @Test
     void savesAndLoadsSelfRegisteredUser() {
-        User saved = userRepository.save(User.invited(new EmailAddress("ivan@sinhub.ru"), "Иван Петров"));
+        User saved = userRepository.save(User.invited(new EmailAddress("ivan@sinhub.ru"), "Иван Петров", TestTime.NOW));
         entityManager.flush();
         entityManager.clear();
 
@@ -41,7 +42,7 @@ class UserRepositoryTest {
 
     @Test
     void findsUserByEmailTypedDifferently() {
-        userRepository.save(User.invited(new EmailAddress("ivan@sinhub.ru"), "Иван Петров"));
+        userRepository.save(User.invited(new EmailAddress("ivan@sinhub.ru"), "Иван Петров", TestTime.NOW));
         entityManager.flush();
         entityManager.clear();
 
@@ -52,9 +53,9 @@ class UserRepositoryTest {
 
     @Test
     void rejectsSecondUserWithSameEmail() {
-        userRepository.saveAndFlush(User.invited(new EmailAddress("ivan@sinhub.ru"), "Иван Петров"));
+        userRepository.saveAndFlush(User.invited(new EmailAddress("ivan@sinhub.ru"), "Иван Петров", TestTime.NOW));
 
-        User duplicate = User.invited(new EmailAddress("IVAN@sinhub.ru"), "Другой Иван");
+        User duplicate = User.invited(new EmailAddress("IVAN@sinhub.ru"), "Другой Иван", TestTime.NOW);
 
         assertThatThrownBy(() -> userRepository.saveAndFlush(duplicate))
                 .isInstanceOf(DataIntegrityViolationException.class);
@@ -62,7 +63,7 @@ class UserRepositoryTest {
 
     @Test
     void rolesSurviveSaveAndLoad() {
-        User user = User.invited(new EmailAddress("curator@sinhub.ru"), "Олег Сидоров");
+        User user = User.invited(new EmailAddress("curator@sinhub.ru"), "Олег Сидоров", TestTime.NOW);
         user.grantRole(Role.CURATOR);
         user.grantRole(Role.STUDENT);
         User saved = userRepository.save(user);
@@ -76,7 +77,7 @@ class UserRepositoryTest {
 
     @Test
     void revokedRoleDisappearsFromDatabase() {
-        User user = User.invited(new EmailAddress("admin@sinhub.ru"), "Анна Петрова");
+        User user = User.invited(new EmailAddress("admin@sinhub.ru"), "Анна Петрова", TestTime.NOW);
         user.grantRole(Role.ADMIN);
         User saved = userRepository.save(user);
         entityManager.flush();
@@ -94,7 +95,7 @@ class UserRepositoryTest {
     /** Роли читаются сразу с пользователем, поэтому их видно и за пределами транзакции репозитория. */
     @Test
     void rolesAreLoadedEagerly() {
-        User user = User.invited(new EmailAddress("eager@sinhub.ru"), "Иван Иванов");
+        User user = User.invited(new EmailAddress("eager@sinhub.ru"), "Иван Иванов", TestTime.NOW);
         user.grantRole(Role.STUDENT);
         UUID id = userRepository.save(user).getId();
         entityManager.flush();

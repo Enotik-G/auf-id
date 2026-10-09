@@ -74,13 +74,13 @@ public class User {
      * доказывал, а доступа к самому ящику у студентов нет — проверять нечем. Значит честный ответ
      * «нет». Сервисам экосистемы на это поле опираться нельзя.
      */
-    public static User invited(EmailAddress email, String fullName) {
+    public static User invited(EmailAddress email, String fullName, Instant createdAt) {
         User user = new User();
         user.email = email;
         user.fullName = fullName;
         user.emailVerified = false;
         user.status = UserStatus.INVITED;
-        user.createdAt = Instant.now();
+        user.createdAt = createdAt;
         return user;
     }
 

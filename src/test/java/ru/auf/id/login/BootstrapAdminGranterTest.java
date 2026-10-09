@@ -1,5 +1,6 @@
 package ru.auf.id.login;
 
+import ru.auf.id.TestTime;
 import ru.auf.id.TestcontainersConfiguration;
 import ru.auf.id.user.AllowedEmailDomains;
 import ru.auf.id.user.EmailAddress;
@@ -161,7 +162,7 @@ class BootstrapAdminGranterTest {
     }
 
     private User activeUser(String email) {
-        User user = User.invited(new EmailAddress(email), "Кто-то");
+        User user = User.invited(new EmailAddress(email), "Кто-то", TestTime.NOW);
         user.activate();
         User saved = userRepository.save(user);
         entityManager.flush();

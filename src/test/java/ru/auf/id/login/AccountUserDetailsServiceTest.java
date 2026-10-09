@@ -1,5 +1,6 @@
 package ru.auf.id.login;
 
+import ru.auf.id.TestTime;
 import ru.auf.id.user.AllowedEmailDomains;
 import ru.auf.id.TestcontainersConfiguration;
 import ru.auf.id.user.EmailAddress;
@@ -102,12 +103,12 @@ class AccountUserDetailsServiceTest {
     }
 
     private User saveUser(String email, boolean confirmed) {
-        User user = User.invited(new EmailAddress(email), "Иван Петров");
+        User user = User.invited(new EmailAddress(email), "Иван Петров", TestTime.NOW);
         if (confirmed) {
             user.activate();
         }
         userRepository.save(user);
-        credentialRepository.save(PasswordCredential.forUser(user, HASH));
+        credentialRepository.save(PasswordCredential.forUser(user, HASH, TestTime.NOW));
         return user;
     }
 }
