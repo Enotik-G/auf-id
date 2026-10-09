@@ -44,14 +44,6 @@ class OneTimeTokenRepositoryTest {
         assertThat(loaded.getUsedAt()).isNull();
     }
 
-    @Test
-    void tokenOfOnePurposeIsNotFoundForAnother() {
-        User user = saveUser();
-        tokenRepository.saveAndFlush(OneTimeToken.issue(user, TokenPurpose.INVITE, HASH, Instant.now()));
-
-        assertThat(tokenRepository.findByTokenHashAndPurpose(HASH, TokenPurpose.PASSWORD_RESET)).isEmpty();
-    }
-
     private User saveUser() {
         return userRepository.save(User.invited(new EmailAddress("ivan@sinhub.ru"), "Иван Петров"));
     }

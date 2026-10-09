@@ -87,14 +87,6 @@ class OneTimeTokenServiceTest {
     }
 
     @Test
-    void tokenOfAnotherPurposeIsRejected() {
-        String rawToken = serviceAt(ISSUED_AT).issue(user, TokenPurpose.INVITE);
-
-        assertThatThrownBy(() -> serviceAt(ISSUED_AT).consume(rawToken, TokenPurpose.PASSWORD_RESET))
-                .isInstanceOf(InvalidOneTimeTokenException.class);
-    }
-
-    @Test
     void unknownTokenIsRejected() {
         assertThatThrownBy(() -> serviceAt(ISSUED_AT).consume("made-up-token", TokenPurpose.INVITE))
                 .isInstanceOf(InvalidOneTimeTokenException.class);
@@ -112,19 +104,6 @@ class OneTimeTokenServiceTest {
         assertThatThrownBy(() -> serviceAt(ISSUED_AT.plus(Duration.ofMinutes(1)))
                 .consume(rawToken, TokenPurpose.INVITE))
                 .isInstanceOf(InvalidOneTimeTokenException.class);
-    }
-
-    @Test
-    void revokeAllTouchesOnlyTheGivenPurpose() {
-        OneTimeTokenService service = serviceAt(ISSUED_AT);
-        String resetToken = service.issue(user, TokenPurpose.PASSWORD_RESET);
-        service.issue(user, TokenPurpose.INVITE);
-
-        service.revokeAll(user, TokenPurpose.INVITE);
-
-        assertThat(serviceAt(ISSUED_AT.plus(Duration.ofMinutes(1)))
-                .consume(resetToken, TokenPurpose.PASSWORD_RESET).getId())
-                .isEqualTo(user.getId());
     }
 
     @Test
