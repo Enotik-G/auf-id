@@ -254,6 +254,23 @@ class AuthorizationServerTest {
         assertThat(wholeRow).contains("auth_time");
     }
 
+
+    /**
+     * То же после обновления refresh-токеном: Spring пересохраняет строку с новыми токенами, и
+     * личные claims не должны вернуться туда этим путём.
+     */
+    @Test
+    void authorizationRowKeepsNoPersonalDataAfterRefresh() throws Exception {
+        String refreshToken = JsonPath.read(exchangeCodeForTokens(authorize()), "$.refresh_token");
+        refresh(refreshToken);
+
+        String wholeRow = String.valueOf(jdbc.queryForMap(
+                "SELECT * FROM oauth2_authorization WHERE principal_name = ?", user.getId().toString()));
+
+        assertThat(wholeRow).doesNotContain("Иван Петров").doesNotContain(EMAIL);
+        assertThat(wholeRow).contains("auth_time");
+    }
+
     /**
      * Код одноразовый: второй обмен того же кода отклоняется.
      *
