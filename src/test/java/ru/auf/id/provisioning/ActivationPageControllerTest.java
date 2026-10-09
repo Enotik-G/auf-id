@@ -22,7 +22,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(ActivationPageController.class)
-@Import(SecurityConfiguration.class)
+@Import({SecurityConfiguration.class, PasswordPolicy.class})
 class ActivationPageControllerTest {
 
     /** Нужен фильтру перепроверки сессии, который ставит SecurityConfiguration. */
@@ -81,6 +81,32 @@ class ActivationPageControllerTest {
                         .param("passwordConfirmation", "short"))
                 .andExpect(status().isOk())
                 .andExpect(content().string(containsString("не короче")));
+
+        verifyNoInteractions(provisioning);
+    }
+
+    /** 11 символов — уже мало: минимум 12 (раздел 3 архитектурного документа). */
+    @Test
+    void refusesElevenCharacterPassword() throws Exception {
+        mockMvc.perform(post("/activate").with(csrf())
+                        .param("token", TOKEN)
+                        .param("password", "elevenchars")
+                        .param("passwordConfirmation", "elevenchars"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("не короче")));
+
+        verifyNoInteractions(provisioning);
+    }
+
+    /** Длинный, но из списка утёкших — такой подберут первым. */
+    @Test
+    void refusesCommonPassword() throws Exception {
+        mockMvc.perform(post("/activate").with(csrf())
+                        .param("token", TOKEN)
+                        .param("password", "Qwertyuiop123")
+                        .param("passwordConfirmation", "Qwertyuiop123"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("слишком распространён")));
 
         verifyNoInteractions(provisioning);
     }
