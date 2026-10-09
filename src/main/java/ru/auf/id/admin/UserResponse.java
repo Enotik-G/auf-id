@@ -14,19 +14,21 @@ public record UserResponse(
         @Schema(example = "0199bc42-8f31-7a1e-9c55-2b7d4e6a1f90")
         UUID id,
 
-        @Schema(example = "ivan.petrov@college.ru")
+        @Schema(example = "ivan.petrov@sinhub.ru")
         String email,
 
         @Schema(example = "Иван Петров")
         String fullName,
 
-        @Schema(description = "INVITED — ждёт активации, ACTIVE — работает, BLOCKED — доступ закрыт",
+        @Schema(description = "INVITED — ждёт активации, ACTIVE — работает, BLOCKED — доступ закрыт администратором, "
+                + "LOCKED — вход закрыт (пока не используется), DELETED — удалена",
                 example = "ACTIVE")
         String status,
 
         @Schema(example = "[\"STUDENT\"]")
         Set<Role> roles,
 
+        @Schema(description = "Когда учётку завёл администратор")
         Instant createdAt,
 
         @Schema(description = "Последний успешный вход; null, если ни разу не входил")

@@ -1,6 +1,7 @@
 package ru.auf.id.provisioning;
 
 import ru.auf.id.onetimetoken.InvalidOneTimeTokenException;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -22,13 +23,10 @@ public class ActivationPageController {
     public static final String ACTIVATE_PATH = "/activate";
     public static final String DONE_PATH = ACTIVATE_PATH + "/done";
 
-    /** Минимальная длина пароля по рекомендации NIST (SP 800-63B): 8 символов, без требований к составу. */
-    private static final int MIN_PASSWORD_LENGTH = 8;
-    private static final int MAX_PASSWORD_LENGTH = 128;
-
     private static final String PAGE = "activate";
 
     private final ProvisioningService provisioning;
+    private final PasswordPolicy passwordPolicy;
 
     @GetMapping(ACTIVATE_PATH)
     public String showPasswordForm(@RequestParam(required = false) String token, Model model) {
@@ -42,9 +40,19 @@ public class ActivationPageController {
     public String setPassword(@RequestParam String token,
                               @RequestParam String password,
                               @RequestParam String passwordConfirmation,
+                              @RequestParam(defaultValue = "false") boolean consent,
+                              HttpServletRequest request,
                               Model model) {
-        if (password.length() < MIN_PASSWORD_LENGTH || password.length() > MAX_PASSWORD_LENGTH) {
-            return showState(model, "weak", token);
+        switch (passwordPolicy.check(password)) {
+            case WRONG_LENGTH -> {
+                return showState(model, "weak", token);
+            }
+            case COMMON -> {
+                return showState(model, "common", token);
+            }
+            case OK -> {
+                // Дальше — сверка с повтором.
+            }
         }
         // Восстановить пароль самостоятельно нельзя — писем нет, нужна новая ссылка от администратора.
         // Поэтому опечатку дешевле не допустить, чем потом разбирать.
@@ -52,8 +60,14 @@ public class ActivationPageController {
             return showState(model, "mismatch", token);
         }
 
+        // Без согласия на обработку ПДн учётку не активируем (152-ФЗ): без него данные человека
+        // обрабатывать нельзя. Галочка обязательна и в форме, но форму можно отправить и мимо браузера.
+        if (!consent) {
+            return showState(model, "consent", token);
+        }
+
         try {
-            provisioning.activate(token, password);
+            provisioning.activate(token, password, request.getRemoteAddr());
         } catch (InvalidOneTimeTokenException e) {
             return showState(model, "invalid", null);
         }
@@ -69,8 +83,8 @@ public class ActivationPageController {
     private static String showState(Model model, String state, String token) {
         model.addAttribute("state", state);
         model.addAttribute("token", token);
-        model.addAttribute("minPasswordLength", MIN_PASSWORD_LENGTH);
-        model.addAttribute("maxPasswordLength", MAX_PASSWORD_LENGTH);
+        model.addAttribute("minPasswordLength", PasswordPolicy.MIN_LENGTH);
+        model.addAttribute("maxPasswordLength", PasswordPolicy.MAX_LENGTH);
         return PAGE;
     }
 }
