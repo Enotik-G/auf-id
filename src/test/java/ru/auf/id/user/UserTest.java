@@ -9,7 +9,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class UserTest {
 
-    private final User user = User.invited(new EmailAddress("ivan@mail.ru"), "Иван Петров");
+    private final User user = User.invited(new EmailAddress("ivan@sinhub.ru"), "Иван Петров");
 
     @Test
     void invitedUserWaitsForActivation() {
@@ -66,7 +66,7 @@ class UserTest {
         user.block();
         assertThat(user.getStatus()).isEqualTo(UserStatus.BLOCKED);
 
-        User active = User.invited(new EmailAddress("oleg@mail.ru"), "Олег Сидоров");
+        User active = User.invited(new EmailAddress("oleg@sinhub.ru"), "Олег Сидоров");
         active.activate();
         active.block();
         assertThat(active.getStatus()).isEqualTo(UserStatus.BLOCKED);

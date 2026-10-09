@@ -1,5 +1,6 @@
 package ru.auf.id.admin;
 
+import ru.auf.id.user.UserRepository;
 import ru.auf.id.SecurityConfiguration;
 import ru.auf.id.provisioning.EmailAlreadyTakenException;
 import ru.auf.id.provisioning.Invitation;
@@ -37,9 +38,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @Import(SecurityConfiguration.class)
 class AdminUserControllerTest {
 
+    /** Нужен фильтру перепроверки сессии, который ставит SecurityConfiguration. */
+    @MockitoBean
+    private UserRepository userRepository;
+
     private static final UUID USER_ID = UUID.fromString("0199bc42-8f31-7a1e-9c55-2b7d4e6a1f90");
     private static final String CREATE_BODY = """
-            {"email":"ivan.petrov@college.ru","fullName":"Иван Петров","roles":["STUDENT"]}""";
+            {"email":"ivan.petrov@sinhub.ru","fullName":"Иван Петров","roles":["STUDENT"]}""";
 
     @Autowired
     private MockMvc mockMvc;
@@ -91,7 +96,7 @@ class AdminUserControllerTest {
                 .andExpect(jsonPath("$.userId").value(USER_ID.toString()))
                 .andExpect(jsonPath("$.activationLink").value("http://localhost:8080/activate?token=raw-token"));
 
-        verify(provisioning).invite(new EmailAddress("ivan.petrov@college.ru"), "Иван Петров", Set.of(Role.STUDENT));
+        verify(provisioning).invite(new EmailAddress("ivan.petrov@sinhub.ru"), "Иван Петров", Set.of(Role.STUDENT));
     }
 
     @Test
@@ -102,17 +107,17 @@ class AdminUserControllerTest {
         mockMvc.perform(post("/api/v1/admin/users").with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"email":"ivan@college.ru","fullName":"Иван Петров"}"""))
+                                {"email":"ivan@sinhub.ru","fullName":"Иван Петров"}"""))
                 .andExpect(status().isCreated());
 
-        verify(provisioning).invite(new EmailAddress("ivan@college.ru"), "Иван Петров", Set.of());
+        verify(provisioning).invite(new EmailAddress("ivan@sinhub.ru"), "Иван Петров", Set.of());
     }
 
     @Test
     @WithMockUser(roles = "ADMIN")
     void reportsTakenEmailAsConflict() throws Exception {
         when(provisioning.invite(any(), any(), any()))
-                .thenThrow(new EmailAlreadyTakenException(new EmailAddress("ivan.petrov@college.ru")));
+                .thenThrow(new EmailAlreadyTakenException(new EmailAddress("ivan.petrov@sinhub.ru")));
 
         mockMvc.perform(post("/api/v1/admin/users").with(csrf())
                         .contentType(MediaType.APPLICATION_JSON).content(CREATE_BODY))
@@ -146,13 +151,13 @@ class AdminUserControllerTest {
     @Test
     @WithMockUser(roles = "ADMIN")
     void showsUser() throws Exception {
-        User user = User.invited(new EmailAddress("ivan@college.ru"), "Иван Петров");
+        User user = User.invited(new EmailAddress("ivan@sinhub.ru"), "Иван Петров");
         user.grantRole(Role.STUDENT);
         when(adminUsers.get(USER_ID)).thenReturn(user);
 
         mockMvc.perform(get("/api/v1/admin/users/" + USER_ID))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.email").value("ivan@college.ru"))
+                .andExpect(jsonPath("$.email").value("ivan@sinhub.ru"))
                 .andExpect(jsonPath("$.status").value("INVITED"))
                 .andExpect(jsonPath("$.roles[0]").value("STUDENT"))
                 .andExpect(jsonPath("$.lastLoginAt").doesNotExist());
@@ -177,6 +182,23 @@ class AdminUserControllerTest {
 
         verify(adminUsers).block(USER_ID);
         verify(adminUsers).unblock(USER_ID);
+    }
+
+    // ─────────────────────────── защита от CSRF ───────────────────────────
+
+    /**
+     * Админка входит по cookie сессии, поэтому чужая страница могла бы отправить форму от имени
+     * вошедшего админа. Без токена CSRF такой запрос отклоняется, до сервиса дело не доходит.
+     *
+     * <p>Путь с настоящим токеном (cookie → заголовок) — в {@code AdminApiCsrfTest}.
+     */
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void requestWithoutCsrfTokenIsRefused() throws Exception {
+        mockMvc.perform(post("/api/v1/admin/users/" + USER_ID + "/unblock"))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(adminUsers);
     }
 
     @Test

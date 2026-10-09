@@ -53,6 +53,6 @@ class OneTimeTokenRepositoryTest {
     }
 
     private User saveUser() {
-        return userRepository.save(User.invited(new EmailAddress("ivan@mail.ru"), "Иван Петров"));
+        return userRepository.save(User.invited(new EmailAddress("ivan@sinhub.ru"), "Иван Петров"));
     }
 }

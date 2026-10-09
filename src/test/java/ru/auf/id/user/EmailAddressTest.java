@@ -16,6 +16,11 @@ class EmailAddressTest {
     }
 
     @Test
+    void domainIsThePartAfterAt() {
+        assertThat(new EmailAddress("Ivan@Sinhub.RU").domain()).isEqualTo("sinhub.ru");
+    }
+
+    @Test
     void differentlyTypedAddressesAreEqual() {
         assertThat(new EmailAddress("IVAN@mail.ru"))
                 .isEqualTo(new EmailAddress("ivan@MAIL.ru "));
