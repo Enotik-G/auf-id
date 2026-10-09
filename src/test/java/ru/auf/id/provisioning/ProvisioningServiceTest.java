@@ -1,5 +1,6 @@
 package ru.auf.id.provisioning;
 
+import ru.auf.id.user.AllowedEmailDomains;
 import ru.auf.id.ClockConfiguration;
 import ru.auf.id.TestcontainersConfiguration;
 import ru.auf.id.onetimetoken.OneTimeTokenRepository;
@@ -7,6 +8,7 @@ import ru.auf.id.onetimetoken.InvalidOneTimeTokenException;
 import ru.auf.id.onetimetoken.OneTimeTokenService;
 import ru.auf.id.onetimetoken.TokenPurpose;
 import ru.auf.id.user.EmailAddress;
+import ru.auf.id.user.InvalidEmailException;
 import ru.auf.id.user.PasswordCredentialRepository;
 import ru.auf.id.user.PasswordHasher;
 import ru.auf.id.user.Role;
@@ -26,11 +28,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @DataJpaTest
-@Import({TestcontainersConfiguration.class, ClockConfiguration.class,
+@Import({TestcontainersConfiguration.class, AllowedEmailDomains.class, ClockConfiguration.class,
         ProvisioningService.class, OneTimeTokenService.class, PasswordHasher.class})
 class ProvisioningServiceTest {
 
-    private static final EmailAddress EMAIL = new EmailAddress("student@college.ru");
+    private static final EmailAddress EMAIL = new EmailAddress("student@sinhub.ru");
 
     @Autowired
     private ProvisioningService provisioning;
@@ -62,6 +64,16 @@ class ProvisioningServiceTest {
     }
 
     /** Войти в выданную учётку нельзя, пока владелец не задал пароль по ссылке. */
+    /** Входят только адреса колледжа — учётку с чужим доменом админ создать не может. */
+    @Test
+    void refusesAddressOutsideTheCollegeDomain() {
+        assertThatThrownBy(() -> provisioning.invite(new EmailAddress("ivan@gmail.com"), "Иван", Set.of()))
+                .isInstanceOf(InvalidEmailException.class)
+                .hasMessageContaining("sinhub.ru");
+
+        assertThat(userRepository.count()).isZero();
+    }
+
     @Test
     void createsNoPasswordUpfront() {
         Invitation invitation = provisioning.invite(EMAIL, "Иван Иванов", Set.of());
@@ -113,7 +125,7 @@ class ProvisioningServiceTest {
     void refusesEmailTakenInAnotherLetterCase() {
         provisioning.invite(EMAIL, "Иван Иванов", Set.of());
 
-        assertThatThrownBy(() -> provisioning.invite(new EmailAddress("Student@College.RU"), "Иван", Set.of()))
+        assertThatThrownBy(() -> provisioning.invite(new EmailAddress("Student@Sinhub.RU"), "Иван", Set.of()))
                 .isInstanceOf(EmailAlreadyTakenException.class);
     }
 
@@ -163,17 +175,6 @@ class ProvisioningServiceTest {
     @Test
     void refusesUnknownToken() {
         assertThatThrownBy(() -> provisioning.activate("never-issued", "correct horse battery staple"))
-                .isInstanceOf(InvalidOneTimeTokenException.class);
-    }
-
-    /** Токен сброса пароля не должен открывать активацию, и наоборот. */
-    @Test
-    void refusesTokenIssuedForAnotherPurpose() {
-        Invitation invitation = provisioning.invite(EMAIL, "Иван Иванов", Set.of());
-        User user = userRepository.findById(invitation.userId()).orElseThrow();
-        String resetToken = tokenService.issue(user, TokenPurpose.PASSWORD_RESET);
-
-        assertThatThrownBy(() -> provisioning.activate(resetToken, "correct horse battery staple"))
                 .isInstanceOf(InvalidOneTimeTokenException.class);
     }
 

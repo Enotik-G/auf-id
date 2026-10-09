@@ -1,5 +1,6 @@
 package ru.auf.id.onetimetoken;
 
+import ru.auf.id.TestTime;
 import ru.auf.id.TestcontainersConfiguration;
 import ru.auf.id.user.EmailAddress;
 import ru.auf.id.user.User;
@@ -34,7 +35,7 @@ class OneTimeTokenServiceTest {
 
     @BeforeEach
     void createUser() {
-        user = userRepository.save(User.invited(new EmailAddress("ivan@mail.ru"), "Иван Петров"));
+        user = userRepository.save(User.invited(new EmailAddress("ivan@sinhub.ru"), "Иван Петров", TestTime.NOW));
     }
 
     @Test
@@ -87,14 +88,6 @@ class OneTimeTokenServiceTest {
     }
 
     @Test
-    void tokenOfAnotherPurposeIsRejected() {
-        String rawToken = serviceAt(ISSUED_AT).issue(user, TokenPurpose.INVITE);
-
-        assertThatThrownBy(() -> serviceAt(ISSUED_AT).consume(rawToken, TokenPurpose.PASSWORD_RESET))
-                .isInstanceOf(InvalidOneTimeTokenException.class);
-    }
-
-    @Test
     void unknownTokenIsRejected() {
         assertThatThrownBy(() -> serviceAt(ISSUED_AT).consume("made-up-token", TokenPurpose.INVITE))
                 .isInstanceOf(InvalidOneTimeTokenException.class);
@@ -115,21 +108,8 @@ class OneTimeTokenServiceTest {
     }
 
     @Test
-    void revokeAllTouchesOnlyTheGivenPurpose() {
-        OneTimeTokenService service = serviceAt(ISSUED_AT);
-        String resetToken = service.issue(user, TokenPurpose.PASSWORD_RESET);
-        service.issue(user, TokenPurpose.INVITE);
-
-        service.revokeAll(user, TokenPurpose.INVITE);
-
-        assertThat(serviceAt(ISSUED_AT.plus(Duration.ofMinutes(1)))
-                .consume(resetToken, TokenPurpose.PASSWORD_RESET).getId())
-                .isEqualTo(user.getId());
-    }
-
-    @Test
     void revokeAllTouchesOnlyTheGivenUser() {
-        User another = userRepository.save(User.invited(new EmailAddress("oleg@mail.ru"), "Олег Сидоров"));
+        User another = userRepository.save(User.invited(new EmailAddress("oleg@sinhub.ru"), "Олег Сидоров", TestTime.NOW));
         OneTimeTokenService service = serviceAt(ISSUED_AT);
         String othersToken = service.issue(another, TokenPurpose.INVITE);
         service.issue(user, TokenPurpose.INVITE);

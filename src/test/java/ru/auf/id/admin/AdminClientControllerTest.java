@@ -1,5 +1,6 @@
 package ru.auf.id.admin;
 
+import ru.auf.id.user.UserRepository;
 import ru.auf.id.SecurityConfiguration;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -29,6 +30,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @WebMvcTest(AdminClientController.class)
 @Import(SecurityConfiguration.class)
 class AdminClientControllerTest {
+
+    /** Нужен фильтру перепроверки сессии, который ставит SecurityConfiguration. */
+    @MockitoBean
+    private UserRepository userRepository;
 
     private static final String NATIVE_BODY = """
             {"clientId":"planner","name":"Планировщик","kind":"NATIVE",
