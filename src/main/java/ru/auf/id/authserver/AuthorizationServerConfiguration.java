@@ -8,6 +8,8 @@ import java.util.List;
 import java.util.Set;
 import java.util.function.Function;
 
+import ru.auf.id.login.SessionUserRevalidationFilter;
+import ru.auf.id.user.UserRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -24,6 +26,7 @@ import org.springframework.security.oauth2.server.authorization.OAuth2Authorizat
 import org.springframework.security.oauth2.server.authorization.oidc.authentication.OidcUserInfoAuthenticationContext;
 import org.springframework.security.oauth2.server.authorization.oidc.OidcProviderConfiguration;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.context.SecurityContextHolderFilter;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
 import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
 import org.springframework.security.web.util.matcher.MediaTypeRequestMatcher;
@@ -49,8 +52,11 @@ public class AuthorizationServerConfiguration {
             HttpSecurity http,
             AuthorizationServerSettings authorizationServerSettings,
             UserClaims userClaims,
+            UserRepository userRepository,
             @Value("${auth.cors.allowed-origins:}") List<String> allowedOrigins) throws Exception {
         http
+                // Заблокированный не должен получать коды из старой сессии — см. фильтр.
+                .addFilterAfter(new SessionUserRevalidationFilter(userRepository), SecurityContextHolderFilter.class)
                 .oauth2AuthorizationServer(authorizationServer -> {
                     // Эта цепочка — только для адресов сервера авторизации.
                     // Плюс предварительные запросы браузера (OPTIONS): ручка токена принимает только POST,
