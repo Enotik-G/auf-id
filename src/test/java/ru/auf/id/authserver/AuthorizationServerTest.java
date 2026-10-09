@@ -431,6 +431,17 @@ class AuthorizationServerTest {
                 .andExpect(jsonPath("$.error").value("invalid_grant"));
     }
 
+    /** Из сессии, открытой до блокировки, код уже не получить: вместо кода — страница входа. */
+    @Test
+    void blockedUserCannotGetCodeFromOldSession() throws Exception {
+        MockHttpSession session = logIn();
+        blockInDatabase();
+
+        mockMvc.perform(get("/oauth2/authorize").queryParams(authorizeParams()).session(session))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/login"));
+    }
+
     /** Refresh-токен, выданный до блокировки, новых токенов не даёт. */
     @Test
     void blockedUserCannotRefreshTokens() throws Exception {
