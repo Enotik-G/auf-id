@@ -13,3 +13,5 @@ databaseChangeLog:
       file: db/changelog/changes/006-create-user-roles.sql
   - include:
       file: db/changelog/changes/007-drop-pending-verification-status.sql
+  - include:
+      file: db/changelog/changes/008-index-authorization-principal.sql
