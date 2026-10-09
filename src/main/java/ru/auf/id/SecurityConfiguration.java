@@ -1,5 +1,7 @@
 package ru.auf.id;
 
+import ru.auf.id.login.SessionUserRevalidationFilter;
+import ru.auf.id.user.UserRepository;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Bean;
@@ -11,9 +13,10 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.context.SecurityContextHolderFilter;
+import org.springframework.security.web.csrf.CsrfFilter;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
-import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 
 import java.io.IOException;
 
@@ -27,8 +30,11 @@ public class SecurityConfiguration {
     /** Вторая по очереди: первой идёт цепочка сервера авторизации (authserver/AuthorizationServerConfiguration). */
     @Bean
     @Order(2)
-    SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    SecurityFilterChain securityFilterChain(HttpSecurity http, UserRepository userRepository) throws Exception {
         http
+                // Сверять вошедшего с БД на каждом запросе: заблокированного — выпустить из сессии,
+                // снятую или выданную роль — применить сразу. Подробно — в самом фильтре.
+                .addFilterAfter(new SessionUserRevalidationFilter(userRepository), SecurityContextHolderFilter.class)
                 .authorizeHttpRequests(requests -> requests
                         // Активация выданной админом учётки: человек ещё не может войти — пароля у него нет.
                         .requestMatchers("/activate", "/activate/done").permitAll()
@@ -47,11 +53,20 @@ public class SecurityConfiguration {
                         // Страница ошибок Spring: без этого любая ошибка превращалась бы в 401.
                         .requestMatchers("/error").permitAll()
                         .anyRequest().authenticated())
-                .csrf(csrf -> csrf
-                        // Токен CSRF — в cookie, а не в серверной сессии: сервис остаётся stateless.
-                        .csrfTokenRepository(new CookieCsrfTokenRepository())
-                        // JSON-API не использует cookie для входа, CSRF-атака на него невозможна.
-                        .ignoringRequestMatchers("/api/**"))
+                // CSRF — на всех запросах, включая админку (/api/v1/admin/**).
+                //
+                // Раньше /api/** был исключён с доводом «JSON-API не входит по cookie», но админка
+                // входит именно по cookie сессии. Тогда любая страница на соседнем поддомене колледжа
+                // могла отправить обычную HTML-форму POST .../users/{id}/unblock от имени вошедшего
+                // админа: SameSite=Lax от «своего» сайта не защищает.
+                //
+                // spa() — готовый режим Spring Security для страниц, которые зовут API из JavaScript
+                // (Swagger UI, будущая админ-панель): токен лежит в cookie XSRF-TOKEN, его можно
+                // прочитать скриптом со своего адреса и вернуть в заголовке X-XSRF-TOKEN. Формы
+                // Thymeleaf по-прежнему получают его скрытым полем _csrf. Токен в cookie, а не в
+                // серверной сессии — сервис остаётся stateless.
+                .csrf(csrf -> csrf.spa())
+                .addFilterAfter(new CsrfCookieFilter(), CsrfFilter.class)
                 // Браузеру без входа показываем страницу логина, а API отвечаем 401: редирект на
                 // HTML-форму в ответ на запрос JSON админ-панель разобрать не сможет.
                 //

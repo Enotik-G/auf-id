@@ -1,5 +1,6 @@
 package ru.auf.id.admin;
 
+import ru.auf.id.user.UserRepository;
 import ru.auf.id.SecurityConfiguration;
 import ru.auf.id.provisioning.EmailAlreadyTakenException;
 import ru.auf.id.provisioning.Invitation;
@@ -36,6 +37,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @WebMvcTest(AdminUserController.class)
 @Import(SecurityConfiguration.class)
 class AdminUserControllerTest {
+
+    /** Нужен фильтру перепроверки сессии, который ставит SecurityConfiguration. */
+    @MockitoBean
+    private UserRepository userRepository;
 
     private static final UUID USER_ID = UUID.fromString("0199bc42-8f31-7a1e-9c55-2b7d4e6a1f90");
     private static final String CREATE_BODY = """
@@ -177,6 +182,23 @@ class AdminUserControllerTest {
 
         verify(adminUsers).block(USER_ID);
         verify(adminUsers).unblock(USER_ID);
+    }
+
+    // ─────────────────────────── защита от CSRF ───────────────────────────
+
+    /**
+     * Админка входит по cookie сессии, поэтому чужая страница могла бы отправить форму от имени
+     * вошедшего админа. Без токена CSRF такой запрос отклоняется, до сервиса дело не доходит.
+     *
+     * <p>Путь с настоящим токеном (cookie → заголовок) — в {@code AdminApiCsrfTest}.
+     */
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void requestWithoutCsrfTokenIsRefused() throws Exception {
+        mockMvc.perform(post("/api/v1/admin/users/" + USER_ID + "/unblock"))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(adminUsers);
     }
 
     @Test

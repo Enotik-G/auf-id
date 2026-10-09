@@ -406,6 +406,62 @@ class AuthorizationServerTest {
         assertThat(third).isNotBlank().isNotEqualTo(second).isNotEqualTo(first);
     }
 
+    // ───────────────────── заблокированный не получает токенов ─────────────────────
+    //
+    // Блокируем прямо в БД, а не через AdminUserService: тот ещё и удаляет выданные авторизации,
+    // и тест проверял бы удаление, а не саму проверку статуса при выдаче токена.
+
+    /**
+     * Код получен из ещё открытой сессии, а пользователя тем временем заблокировали: обменять код на
+     * токены уже нельзя.
+     */
+    @Test
+    void blockedUserCannotExchangeCodeForTokens() throws Exception {
+        String code = authorize();
+        blockInDatabase();
+
+        mockMvc.perform(post("/oauth2/token")
+                        .with(clientSecret())
+                        .param("grant_type", "authorization_code")
+                        .param("code", code)
+                        .param("redirect_uri", REDIRECT_URI)
+                        .param("client_id", CLIENT_ID)
+                        .param("code_verifier", codeVerifier))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("invalid_grant"));
+    }
+
+    /** Из сессии, открытой до блокировки, код уже не получить: вместо кода — страница входа. */
+    @Test
+    void blockedUserCannotGetCodeFromOldSession() throws Exception {
+        MockHttpSession session = logIn();
+        blockInDatabase();
+
+        mockMvc.perform(get("/oauth2/authorize").queryParams(authorizeParams()).session(session))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/login"));
+    }
+
+    /** Refresh-токен, выданный до блокировки, новых токенов не даёт. */
+    @Test
+    void blockedUserCannotRefreshTokens() throws Exception {
+        String refreshToken = JsonPath.read(exchangeCodeForTokens(authorize()), "$.refresh_token");
+        blockInDatabase();
+
+        mockMvc.perform(post("/oauth2/token")
+                        .with(clientSecret())
+                        .param("grant_type", "refresh_token")
+                        .param("refresh_token", refreshToken))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("invalid_grant"));
+    }
+
+    private void blockInDatabase() {
+        User stored = userRepository.findById(user.getId()).orElseThrow();
+        stored.block();
+        userRepository.save(stored);
+    }
+
     private String refresh(String refreshToken) throws Exception {
         return mockMvc.perform(post("/oauth2/token")
                         .with(clientSecret())
@@ -435,6 +491,28 @@ class AuthorizationServerTest {
      *
      * <p>До шага 24 здесь вернулось бы старое значение: Spring отдавал поля сохранённого id_token.
      */
+    @Test
+    void userinfoFollowsScopesOfTheTokenNotOfTheLogin() throws Exception {
+        String refreshToken = JsonPath.read(exchangeCodeForTokens(authorize()), "$.refresh_token");
+
+        // Клиент вправе попросить при обновлении меньше прав, чем дали при входе (RFC 6749, 6).
+        // Новый токен — только с openid, и /userinfo по нему не должен отдавать ФИО и почту.
+        String narrowed = mockMvc.perform(post("/oauth2/token")
+                        .with(clientSecret())
+                        .param("grant_type", "refresh_token")
+                        .param("refresh_token", refreshToken)
+                        .param("scope", "openid"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        String accessToken = JsonPath.read(narrowed, "$.access_token");
+
+        mockMvc.perform(get("/userinfo").header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.sub").value(user.getId().toString()))
+                .andExpect(jsonPath("$.name").doesNotExist())
+                .andExpect(jsonPath("$.email").doesNotExist());
+    }
+
     @Test
     void userinfoReturnsCurrentProfileNotTheOneCapturedAtLogin() throws Exception {
         String accessToken = JsonPath.read(exchangeCodeForTokens(authorize()), "$.access_token");

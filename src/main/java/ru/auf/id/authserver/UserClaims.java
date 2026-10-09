@@ -3,8 +3,11 @@ package ru.auf.id.authserver;
 import ru.auf.id.user.Role;
 import ru.auf.id.user.User;
 import ru.auf.id.user.UserRepository;
+import ru.auf.id.user.UserStatus;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
+import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
+import org.springframework.security.oauth2.core.OAuth2ErrorCodes;
 import org.springframework.security.oauth2.core.oidc.OidcScopes;
 import org.springframework.security.oauth2.core.oidc.OidcUserInfo;
 import org.springframework.security.oauth2.core.oidc.StandardClaimNames;
@@ -37,12 +40,26 @@ public class UserClaims {
 
     private final UserRepository users;
 
+    /**
+     * Дописывает в токен поля пользователя — или отказывает в токене, если пользователь больше не
+     * может входить.
+     *
+     * <p>Через этот метод проходит <b>каждый</b> токен человека: и при обмене кода, и при обновлении
+     * refresh-токеном. Поэтому статус проверяется здесь: заблокированный мог получить код из ещё
+     * открытой сессии или держать refresh-токен на 30 дней, но новый токен не получит ни так, ни так.
+     *
+     * @throws OAuth2AuthenticationException {@code invalid_grant}, если пользователя нет или он не
+     *                                       {@code ACTIVE}; Spring превратит его в ответ 400
+     */
     public void addTo(JwtEncodingContext context) {
         // Токен для сервиса (client_credentials) выдаётся без участия человека — личных полей в нём нет.
         if (AuthorizationGrantType.CLIENT_CREDENTIALS.equals(context.getAuthorizationGrantType())) {
             return;
         }
-        findUser(context.getPrincipal().getName()).ifPresent(user -> addTo(context, user));
+        User user = findUser(context.getPrincipal().getName())
+                .filter(found -> found.getStatus() == UserStatus.ACTIVE)
+                .orElseThrow(() -> new OAuth2AuthenticationException(OAuth2ErrorCodes.INVALID_GRANT));
+        addTo(context, user);
     }
 
     private void addTo(JwtEncodingContext context, User user) {
@@ -72,7 +89,7 @@ public class UserClaims {
      * токен и {@code /userinfo} не разошлись.
      *
      * @param principalName владелец авторизации, то есть id пользователя строкой
-     * @param scopes        права, выданные при входе
+     * @param scopes        права предъявленного access-токена
      */
     public OidcUserInfo userInfo(String principalName, Set<String> scopes) {
         Map<String, Object> claims = new HashMap<>();
