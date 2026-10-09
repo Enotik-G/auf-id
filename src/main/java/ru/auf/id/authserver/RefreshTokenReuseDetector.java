@@ -38,12 +38,13 @@ import java.time.Duration;
 public class RefreshTokenReuseDetector {
 
     /**
-     * Сколько помним погашенный токен — столько же, сколько живёт сам refresh-токен.
+     * Сколько помним погашенный токен — ровно столько, сколько живёт сам refresh-токен.
      *
      * <p>Дольше незачем: токен старше этого срока истёк бы и так, и предъявить его нельзя.
-     * Короче опасно: забыв о токене раньше, чем он истёк, мы перестали бы узнавать кражу.
+     * Короче опасно: забыв о токене раньше, чем он истёк, мы перестали бы узнавать кражу. Поэтому
+     * это не своё число, а ссылка на общий срок.
      */
-    static final Duration MEMORY = Duration.ofDays(30);
+    static final Duration REMEMBER_SPENT_TOKEN_FOR = TokenLifetimes.REFRESH_TOKEN;
 
     /**
      * Разделитель владельца и клиента в значении. Пробел безопасен: оба — UUID строкой, пробелов
@@ -62,7 +63,7 @@ public class RefreshTokenReuseDetector {
      * @param registeredClientId  внутренний id клиента ({@code oauth2_registered_client.id})
      */
     void remember(String tokenHash, String principalName, String registeredClientId) {
-        redis.opsForValue().set(key(tokenHash), principalName + SEPARATOR + registeredClientId, MEMORY);
+        redis.opsForValue().set(key(tokenHash), principalName + SEPARATOR + registeredClientId, REMEMBER_SPENT_TOKEN_FOR);
     }
 
     /**
