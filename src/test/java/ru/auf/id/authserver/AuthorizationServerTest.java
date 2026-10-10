@@ -1,5 +1,7 @@
 package ru.auf.id.authserver;
 
+import ru.auf.id.admin.AdminUserService;
+import ru.auf.id.TestTime;
 import ru.auf.id.TestcontainersConfiguration;
 import ru.auf.id.user.EmailAddress;
 import ru.auf.id.user.PasswordCredential;
@@ -61,7 +63,7 @@ class AuthorizationServerTest {
     private static final String CLIENT_ID = DevClientRegistration.LAUNCHER_CLIENT_ID;
     private static final String REDIRECT_URI = "http://127.0.0.1:8090/login/oauth2/code/auth";
 
-    private static final String EMAIL = "ivan@mail.ru";
+    private static final String EMAIL = "ivan@sinhub.ru";
     private static final String PASSWORD = "correct horse battery staple";
 
     /** PKCE: секрет, который знает только клиент; в запрос на вход уходит его хеш (challenge). */
@@ -89,10 +91,10 @@ class AuthorizationServerTest {
 
     @BeforeEach
     void createActiveUser() {
-        user = User.invited(new EmailAddress(EMAIL), "Иван Петров");
+        user = User.invited(new EmailAddress(EMAIL), "Иван Петров", TestTime.NOW);
         user.activate();
         userRepository.save(user);
-        credentialRepository.save(PasswordCredential.forUser(user, passwordHasher.hash(PASSWORD)));
+        credentialRepository.save(PasswordCredential.forUser(user, passwordHasher.hash(PASSWORD), TestTime.NOW));
     }
 
     @Autowired
@@ -100,6 +102,9 @@ class AuthorizationServerTest {
 
     @Autowired
     private DevClientRegistration devClientRegistration;
+
+    @Autowired
+    private AdminUserService adminUserService;
 
     @AfterEach
     void cleanUp() {
@@ -227,9 +232,9 @@ class AuthorizationServerTest {
                         + " FROM oauth2_authorization WHERE principal_name = ?",
                 user.getId().toString());
 
-        assertThat(row.get("authorization_code_value")).isEqualTo(HashedTokenAuthorizationService.hash(code));
-        assertThat(row.get("access_token_value")).isEqualTo(HashedTokenAuthorizationService.hash(accessToken));
-        assertThat(row.get("oidc_id_token_value")).isEqualTo(HashedTokenAuthorizationService.hash(idToken));
+        assertThat(row.get("authorization_code_value")).isEqualTo(HashedTokenAuthorizationService.hashOf(code));
+        assertThat(row.get("access_token_value")).isEqualTo(HashedTokenAuthorizationService.hashOf(accessToken));
+        assertThat(row.get("oidc_id_token_value")).isEqualTo(HashedTokenAuthorizationService.hashOf(idToken));
         assertThat(row.values()).allSatisfy(value -> assertThat((String) value).startsWith("sha256:"));
     }
 
@@ -237,7 +242,7 @@ class AuthorizationServerTest {
      * В строке авторизации не остаётся ни ФИО, ни почты (шаг 24).
      *
      * <p>Шаг 12 захешировал значения токенов, но claims Spring хранит рядом обычным JSON — и до
-     * шага 24 в колонках {@code *_metadata} лежало «Иван Петров» и {@code ivan@mail.ru}. Зонд по
+     * шага 24 в колонках {@code *_metadata} лежало «Иван Петров» и {@code ivan@sinhub.ru}. Зонд по
      * <b>всем</b> колонкам: так проверка не зависит от того, в какую именно их положит Spring.
      */
     @Test
@@ -250,6 +255,23 @@ class AuthorizationServerTest {
 
         assertThat(wholeRow).doesNotContain("Иван Петров").doesNotContain(EMAIL);
         // Служебные claims остаться должны: по ним работают выход и introspection.
+        assertThat(wholeRow).contains("auth_time");
+    }
+
+
+    /**
+     * То же после обновления refresh-токеном: Spring пересохраняет строку с новыми токенами, и
+     * личные claims не должны вернуться туда этим путём.
+     */
+    @Test
+    void authorizationRowKeepsNoPersonalDataAfterRefresh() throws Exception {
+        String refreshToken = JsonPath.read(exchangeCodeForTokens(authorize()), "$.refresh_token");
+        refresh(refreshToken);
+
+        String wholeRow = String.valueOf(jdbc.queryForMap(
+                "SELECT * FROM oauth2_authorization WHERE principal_name = ?", user.getId().toString()));
+
+        assertThat(wholeRow).doesNotContain("Иван Петров").doesNotContain(EMAIL);
         assertThat(wholeRow).contains("auth_time");
     }
 
@@ -342,7 +364,7 @@ class AuthorizationServerTest {
                 "SELECT refresh_token_value FROM oauth2_authorization WHERE principal_name = ?",
                 String.class, user.getId().toString());
 
-        assertThat(stored).isEqualTo(HashedTokenAuthorizationService.hash(refreshToken));
+        assertThat(stored).isEqualTo(HashedTokenAuthorizationService.hashOf(refreshToken));
     }
 
     /**
@@ -406,6 +428,81 @@ class AuthorizationServerTest {
         assertThat(third).isNotBlank().isNotEqualTo(second).isNotEqualTo(first);
     }
 
+    // ───────────────────── заблокированный не получает токенов ─────────────────────
+    //
+    // Блокируем прямо в БД, а не через AdminUserService: тот ещё и удаляет выданные авторизации,
+    // и тест проверял бы удаление, а не саму проверку статуса при выдаче токена.
+
+    /**
+     * Код получен из ещё открытой сессии, а пользователя тем временем заблокировали: обменять код на
+     * токены уже нельзя.
+     */
+    @Test
+    void blockedUserCannotExchangeCodeForTokens() throws Exception {
+        String code = authorize();
+        blockInDatabase();
+
+        mockMvc.perform(post("/oauth2/token")
+                        .with(clientSecret())
+                        .param("grant_type", "authorization_code")
+                        .param("code", code)
+                        .param("redirect_uri", REDIRECT_URI)
+                        .param("client_id", CLIENT_ID)
+                        .param("code_verifier", codeVerifier))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("invalid_grant"));
+    }
+
+    /** Из сессии, открытой до блокировки, код уже не получить: вместо кода — страница входа. */
+    @Test
+    void blockedUserCannotGetCodeFromOldSession() throws Exception {
+        MockHttpSession session = logIn();
+        blockInDatabase();
+
+        mockMvc.perform(get("/oauth2/authorize").queryParams(authorizeParams()).session(session))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/login"));
+    }
+
+    /**
+     * Сервис, которому 10 минут жизни токена после блокировки слишком много, может спросить AUF ID
+     * о токене (introspection, RFC 7662) — это обещано в {@code docs/service-integration.md}.
+     * Блокировка удаляет авторизацию, и токен перестаёт быть активным сразу.
+     */
+    @Test
+    void introspectionReportsTokenOfBlockedUserAsInactive() throws Exception {
+        String accessToken = JsonPath.read(exchangeCodeForTokens(authorize()), "$.access_token");
+        mockMvc.perform(post("/oauth2/introspect").with(clientSecret()).param("token", accessToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.active").value(true));
+
+        adminUserService.block(user.getId());
+
+        mockMvc.perform(post("/oauth2/introspect").with(clientSecret()).param("token", accessToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.active").value(false));
+    }
+
+    /** Refresh-токен, выданный до блокировки, новых токенов не даёт. */
+    @Test
+    void blockedUserCannotRefreshTokens() throws Exception {
+        String refreshToken = JsonPath.read(exchangeCodeForTokens(authorize()), "$.refresh_token");
+        blockInDatabase();
+
+        mockMvc.perform(post("/oauth2/token")
+                        .with(clientSecret())
+                        .param("grant_type", "refresh_token")
+                        .param("refresh_token", refreshToken))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("invalid_grant"));
+    }
+
+    private void blockInDatabase() {
+        User stored = userRepository.findById(user.getId()).orElseThrow();
+        stored.block();
+        userRepository.save(stored);
+    }
+
     private String refresh(String refreshToken) throws Exception {
         return mockMvc.perform(post("/oauth2/token")
                         .with(clientSecret())
@@ -435,6 +532,28 @@ class AuthorizationServerTest {
      *
      * <p>До шага 24 здесь вернулось бы старое значение: Spring отдавал поля сохранённого id_token.
      */
+    @Test
+    void userinfoFollowsScopesOfTheTokenNotOfTheLogin() throws Exception {
+        String refreshToken = JsonPath.read(exchangeCodeForTokens(authorize()), "$.refresh_token");
+
+        // Клиент вправе попросить при обновлении меньше прав, чем дали при входе (RFC 6749, 6).
+        // Новый токен — только с openid, и /userinfo по нему не должен отдавать ФИО и почту.
+        String narrowed = mockMvc.perform(post("/oauth2/token")
+                        .with(clientSecret())
+                        .param("grant_type", "refresh_token")
+                        .param("refresh_token", refreshToken)
+                        .param("scope", "openid"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        String accessToken = JsonPath.read(narrowed, "$.access_token");
+
+        mockMvc.perform(get("/userinfo").header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.sub").value(user.getId().toString()))
+                .andExpect(jsonPath("$.name").doesNotExist())
+                .andExpect(jsonPath("$.email").doesNotExist());
+    }
+
     @Test
     void userinfoReturnsCurrentProfileNotTheOneCapturedAtLogin() throws Exception {
         String accessToken = JsonPath.read(exchangeCodeForTokens(authorize()), "$.access_token");

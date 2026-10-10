@@ -3,8 +3,11 @@ package ru.auf.id.authserver;
 import ru.auf.id.user.Role;
 import ru.auf.id.user.User;
 import ru.auf.id.user.UserRepository;
+import ru.auf.id.user.UserStatus;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
+import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
+import org.springframework.security.oauth2.core.OAuth2ErrorCodes;
 import org.springframework.security.oauth2.core.oidc.OidcScopes;
 import org.springframework.security.oauth2.core.oidc.OidcUserInfo;
 import org.springframework.security.oauth2.core.oidc.StandardClaimNames;
@@ -37,12 +40,26 @@ public class UserClaims {
 
     private final UserRepository users;
 
+    /**
+     * Дописывает в токен поля пользователя — или отказывает в токене, если пользователь больше не
+     * может входить.
+     *
+     * <p>Через этот метод проходит <b>каждый</b> токен человека: и при обмене кода, и при обновлении
+     * refresh-токеном. Поэтому статус проверяется здесь: заблокированный мог получить код из ещё
+     * открытой сессии или держать refresh-токен на 30 дней, но новый токен не получит ни так, ни так.
+     *
+     * @throws OAuth2AuthenticationException {@code invalid_grant}, если пользователя нет или он не
+     *                                       {@code ACTIVE}; Spring превратит его в ответ 400
+     */
     public void addTo(JwtEncodingContext context) {
         // Токен для сервиса (client_credentials) выдаётся без участия человека — личных полей в нём нет.
         if (AuthorizationGrantType.CLIENT_CREDENTIALS.equals(context.getAuthorizationGrantType())) {
             return;
         }
-        findUser(context.getPrincipal().getName()).ifPresent(user -> addTo(context, user));
+        User user = findUser(context.getPrincipal().getName())
+                .filter(found -> found.getStatus() == UserStatus.ACTIVE)
+                .orElseThrow(() -> new OAuth2AuthenticationException(OAuth2ErrorCodes.INVALID_GRANT));
+        addTo(context, user);
     }
 
     private void addTo(JwtEncodingContext context, User user) {
@@ -57,11 +74,7 @@ public class UserClaims {
 
     /**
      * Профиль для {@code /userinfo} — <b>из таблицы {@code users}</b>, а не из claims, сохранённых
-     * при входе (шаг 24).
-     *
-     * <p>Так Spring делает по умолчанию: берёт поля из сохранённого id_token. Из-за этого ФИО и
-     * почта лежали в колонке {@code oidc_id_token_metadata} открытым текстом, и хеширование токенов
-     * (шаг 12) их не закрывало. Теперь claims там не хранятся, а профиль собирается заново.
+     * при входе (их больше нет, см. {@code HashedTokenAuthorizationService}).
      *
      * <p>Побочный выигрыш: {@code /userinfo} отдаёт данные <b>на текущий момент</b>. Исправили ФИО
      * в админке — следующий запрос вернёт новое, не дожидаясь, пока человек войдёт заново. С
@@ -72,7 +85,7 @@ public class UserClaims {
      * токен и {@code /userinfo} не разошлись.
      *
      * @param principalName владелец авторизации, то есть id пользователя строкой
-     * @param scopes        права, выданные при входе
+     * @param scopes        права предъявленного access-токена
      */
     public OidcUserInfo userInfo(String principalName, Set<String> scopes) {
         Map<String, Object> claims = new HashMap<>();
@@ -88,9 +101,8 @@ public class UserClaims {
      * {@code name} при scope {@code profile}, {@code email} и {@code email_verified} при scope
      * {@code email}. Клиент, который scope не запросил, личных данных не получает.
      *
-     * <p>{@code HashMap}, а не {@code Map.of} — по той же причине, что {@code ArrayList} в
-     * {@link #roleNames}: неизменяемые коллекции JDK Jackson не восстанавливает при чтении
-     * авторизации обратно из БД.
+     * <p>Карта нигде не хранится: её сразу переливают в claims токена или в ответ {@code /userinfo}.
+     * {@code HashMap} — просто потому, что поля добавляются по условиям.
      */
     private static Map<String, Object> personalClaims(User user, Set<String> scopes) {
         Map<String, Object> claims = new HashMap<>();

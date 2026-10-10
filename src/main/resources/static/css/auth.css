@@ -23,6 +23,7 @@ body {
 
 h1 { margin: 0 0 12px; font-size: 22px; }
 p { margin: 0 0 20px; line-height: 1.5; color: #57606a; }
+p.hint { margin-top: -12px; font-size: 14px; }
 
 label { display: block; margin: 0 0 6px; font-size: 14px; font-weight: 600; }
 
@@ -56,6 +57,9 @@ button.secondary { background: #eaeef2; color: #1f2328; }
 button.secondary:hover { background: #dde3e9; }
 
 .captcha { display: block; margin: 0 0 16px; }
+
+label.checkbox { display: flex; gap: 8px; align-items: flex-start; margin: 0 0 16px; font-weight: 400; line-height: 1.4; }
+label.checkbox input { margin-top: 3px; }
 
 .message { margin: 0 0 16px; padding: 10px 12px; border-radius: 8px; font-size: 14px; line-height: 1.4; }
 .message.error { background: #ffebe9; color: #82071e; }

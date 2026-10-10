@@ -39,6 +39,11 @@ public record EmailAddress(String value) {
         }
     }
 
+    /** Часть после {@code @}: для {@code ivan@sinhub.ru} — {@code sinhub.ru}. Уже в нижнем регистре. */
+    public String domain() {
+        return value.substring(value.indexOf('@') + 1);
+    }
+
     @Override
     public String toString() {
         return value;
