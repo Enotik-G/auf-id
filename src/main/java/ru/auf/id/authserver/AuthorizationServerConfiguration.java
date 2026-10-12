@@ -21,7 +21,6 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
 import org.springframework.security.oauth2.core.oidc.OidcUserInfo;
 import org.springframework.security.oauth2.jose.jws.SignatureAlgorithm;
-import org.springframework.security.oauth2.server.authorization.OAuth2Authorization;
 import org.springframework.security.oauth2.server.authorization.OAuth2AuthorizationServerMetadata;
 import org.springframework.security.oauth2.server.authorization.oidc.authentication.OidcUserInfoAuthenticationContext;
 import org.springframework.security.oauth2.server.authorization.oidc.OidcProviderConfiguration;
@@ -178,18 +177,18 @@ public class AuthorizationServerConfiguration {
      * в колонке {@code oidc_id_token_metadata} открытым текстом, и хеширование токенов (шаг 12) их
      * не закрывало: из дампа БД нельзя было войти, но прочитать, кто есть кто, — можно.
      *
-     * <p>Права берём те, что выданы при входе ({@code getAuthorizedScopes}), а не те, что в
-     * access-токене: это один и тот же набор, но авторизованные права — первоисточник.
+     * <p>Права берём <b>из предъявленного access-токена</b>, а не из авторизации. Это разные наборы:
+     * при обновлении refresh-токеном клиент вправе попросить меньше прав, чем дали при входе, и
+     * новый токен получит только их, а у авторизации останется прежний, полный набор. Смотри мы на
+     * него — токен без scope {@code email} получал бы на {@code /userinfo} почту.
      *
      * <p>Проверять токен здесь не нужно — до маппера дело доходит только после того, как Spring
      * сверил подпись, срок, отзыв и наличие scope {@code openid}.
      */
     private static Function<OidcUserInfoAuthenticationContext, OidcUserInfo> profileFromDatabase(
             UserClaims userClaims) {
-        return context -> {
-            OAuth2Authorization authorization = context.getAuthorization();
-            return userClaims.userInfo(authorization.getPrincipalName(), authorization.getAuthorizedScopes());
-        };
+        return context -> userClaims.userInfo(
+                context.getAuthorization().getPrincipalName(), context.getAccessToken().getScopes());
     }
 
     /** Предварительный запрос (OPTIONS) к адресам сервера авторизации, которые читают из JavaScript. */

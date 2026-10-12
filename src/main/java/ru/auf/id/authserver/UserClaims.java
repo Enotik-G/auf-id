@@ -89,7 +89,7 @@ public class UserClaims {
      * токен и {@code /userinfo} не разошлись.
      *
      * @param principalName владелец авторизации, то есть id пользователя строкой
-     * @param scopes        права, выданные при входе
+     * @param scopes        права предъявленного access-токена
      */
     public OidcUserInfo userInfo(String principalName, Set<String> scopes) {
         Map<String, Object> claims = new HashMap<>();
