@@ -1,18 +1,15 @@
 package ru.auf.id.onetimetoken;
 
+import ru.auf.id.Sha256;
 import ru.auf.id.user.User;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.nio.charset.StandardCharsets;
-import java.security.GeneralSecurityException;
-import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Base64;
-import java.util.HexFormat;
 import java.util.List;
 
 /**
@@ -34,7 +31,7 @@ public class OneTimeTokenService {
     @Transactional
     public String issue(User user, TokenPurpose purpose) {
         String rawToken = generateRawToken();
-        repository.save(OneTimeToken.issue(user, purpose, sha256Hex(rawToken), Instant.now(clock)));
+        repository.save(OneTimeToken.issue(user, purpose, Sha256.hex(rawToken), Instant.now(clock)));
         return rawToken;
     }
 
@@ -45,7 +42,7 @@ public class OneTimeTokenService {
      */
     @Transactional
     public User consume(String rawToken, TokenPurpose purpose) {
-        OneTimeToken token = repository.findByTokenHashAndPurpose(sha256Hex(rawToken), purpose)
+        OneTimeToken token = repository.findByTokenHashAndPurpose(Sha256.hex(rawToken), purpose)
                 .orElseThrow(InvalidOneTimeTokenException::new);
         token.markUsed(Instant.now(clock));
         return token.getUser();
@@ -70,12 +67,4 @@ public class OneTimeTokenService {
         return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }
 
-    private static String sha256Hex(String rawToken) {
-        try {
-            byte[] digest = MessageDigest.getInstance("SHA-256").digest(rawToken.getBytes(StandardCharsets.UTF_8));
-            return HexFormat.of().formatHex(digest);
-        } catch (GeneralSecurityException e) {
-            throw new IllegalStateException("SHA-256 недоступен в этой JVM", e);
-        }
-    }
 }

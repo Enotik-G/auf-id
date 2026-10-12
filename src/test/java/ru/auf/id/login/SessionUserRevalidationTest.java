@@ -1,5 +1,6 @@
 package ru.auf.id.login;
 
+import ru.auf.id.TestTime;
 import ru.auf.id.TestcontainersConfiguration;
 import ru.auf.id.user.EmailAddress;
 import ru.auf.id.user.PasswordCredential;
@@ -63,11 +64,11 @@ class SessionUserRevalidationTest {
 
     @BeforeEach
     void createAdmin() {
-        admin = User.invited(new EmailAddress(EMAIL), "Анна Админова");
+        admin = User.invited(new EmailAddress(EMAIL), "Анна Админова", TestTime.NOW);
         admin.activate();
         admin.grantRole(Role.ADMIN);
         userRepository.save(admin);
-        credentialRepository.save(PasswordCredential.forUser(admin, passwordHasher.hash(PASSWORD)));
+        credentialRepository.save(PasswordCredential.forUser(admin, passwordHasher.hash(PASSWORD), TestTime.NOW));
     }
 
     @AfterEach

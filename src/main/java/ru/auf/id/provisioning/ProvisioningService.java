@@ -13,10 +13,13 @@ import ru.auf.id.user.User;
 import ru.auf.id.user.UserRepository;
 import ru.auf.id.user.UserNotFoundException;
 import ru.auf.id.user.UserStatus;
+import ru.auf.id.user.WrongUserStatusException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.util.Set;
 import java.util.UUID;
 
@@ -35,6 +38,7 @@ public class ProvisioningService {
     private final PasswordHasher passwordHasher;
     private final OneTimeTokenService tokenService;
     private final AllowedEmailDomains allowedDomains;
+    private final Clock clock;
 
     /**
      * Создаёт учётку в статусе {@code INVITED} и выдаёт токен активации.
@@ -52,7 +56,7 @@ public class ProvisioningService {
             throw new EmailAlreadyTakenException(email);
         }
 
-        User user = User.invited(email, fullName);
+        User user = User.invited(email, fullName, Instant.now(clock));
         roles.forEach(user::grantRole);
         userRepository.save(user);
 
@@ -68,13 +72,13 @@ public class ProvisioningService {
      * ушла не туда.
      *
      * @throws UserNotFoundException если учётки нет
-     * @throws IllegalStateException если учётка уже не ждёт активации
+     * @throws WrongUserStatusException если учётка уже не ждёт активации
      */
     @Transactional
     public Invitation reissueInvitation(UUID userId) {
         User user = userRepository.findById(userId).orElseThrow(() -> new UserNotFoundException(userId));
         if (user.getStatus() != UserStatus.INVITED) {
-            throw new IllegalStateException(
+            throw new WrongUserStatusException(
                     "Ссылку активации можно выдать только учётке в статусе INVITED, сейчас " + user.getStatus());
         }
 
@@ -98,7 +102,7 @@ public class ProvisioningService {
         if (user.getStatus() != UserStatus.INVITED) {
             throw new InvalidOneTimeTokenException();
         }
-        credentialRepository.save(PasswordCredential.forUser(user, passwordHasher.hash(rawPassword)));
+        credentialRepository.save(PasswordCredential.forUser(user, passwordHasher.hash(rawPassword), Instant.now(clock)));
         user.activate();
     }
 }

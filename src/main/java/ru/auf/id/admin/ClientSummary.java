@@ -1,5 +1,6 @@
 package ru.auf.id.admin;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClient;
@@ -8,12 +9,25 @@ import java.time.Instant;
 import java.util.Set;
 
 /** Зарегистрированный клиент глазами администратора. Секрета здесь нет и быть не может. */
+@Schema(description = "Зарегистрированный сервис. Секрета здесь нет: в базе лежит только его хеш")
 public record ClientSummary(
+
+        @Schema(description = "Идентификатор клиента — его передаёт сервис при входе", example = "planner")
         String clientId,
+
+        @Schema(description = "Название для человека", example = "Планировщик")
         String name,
+
+        @Schema(description = "Вид клиента — следует из его настроек, отдельно не хранится", example = "BROWSER")
         ClientKind kind,
+
+        @Schema(description = "Куда разрешено возвращать после входа", example = "[\"https://planner.sinhub.ru/callback\"]")
         Set<String> redirectUris,
+
+        @Schema(description = "Какие права (scope) клиент может запросить", example = "[\"openid\", \"profile\", \"email\"]")
         Set<String> scopes,
+
+        @Schema(description = "Когда клиента зарегистрировали")
         Instant registeredAt
 ) {
     public static ClientSummary of(RegisteredClient client) {

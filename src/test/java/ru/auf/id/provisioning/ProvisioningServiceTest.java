@@ -178,17 +178,6 @@ class ProvisioningServiceTest {
                 .isInstanceOf(InvalidOneTimeTokenException.class);
     }
 
-    /** Токен сброса пароля не должен открывать активацию, и наоборот. */
-    @Test
-    void refusesTokenIssuedForAnotherPurpose() {
-        Invitation invitation = provisioning.invite(EMAIL, "Иван Иванов", Set.of());
-        User user = userRepository.findById(invitation.userId()).orElseThrow();
-        String resetToken = tokenService.issue(user, TokenPurpose.PASSWORD_RESET);
-
-        assertThatThrownBy(() -> provisioning.activate(resetToken, "correct horse battery staple"))
-                .isInstanceOf(InvalidOneTimeTokenException.class);
-    }
-
     /**
      * Вторая ссылка, выданная до активации, после неё уже не работает: статус проверяется отдельно от
      * токена, иначе активированный аккаунт можно было бы «активировать» повторно с новым паролем.

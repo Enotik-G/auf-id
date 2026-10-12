@@ -39,12 +39,12 @@ public class PasswordCredential {
     @Column(name = "changed_at", nullable = false)
     private Instant changedAt;
 
-    public static PasswordCredential forUser(User user, String passwordHash) {
+    public static PasswordCredential forUser(User user, String passwordHash, Instant changedAt) {
         PasswordCredential credential = new PasswordCredential();
         credential.user = user;
         credential.passwordHash = passwordHash;
         credential.mustChange = false;
-        credential.changedAt = Instant.now();
+        credential.changedAt = changedAt;
         return credential;
     }
 }

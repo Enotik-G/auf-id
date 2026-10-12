@@ -1,5 +1,6 @@
 package ru.auf.id.admin;
 
+import ru.auf.id.authserver.TokenLifetimes;
 import org.springframework.jdbc.core.JdbcOperations;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
@@ -14,7 +15,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.net.URI;
 import java.security.SecureRandom;
-import java.time.Duration;
 import java.util.Base64;
 import java.util.List;
 import java.util.Objects;
@@ -30,17 +30,6 @@ import java.util.regex.Pattern;
  */
 @Service
 public class AdminClientService {
-
-    /** Access token живёт 10 минут: сервисы проверяют его сами, без запроса в Auth (решение архитектуры). */
-    private static final Duration ACCESS_TOKEN_LIFETIME = Duration.ofMinutes(10);
-
-    /**
-     * Refresh-токен живёт 30 дней — и срок считается заново от каждого обновления (решение 2026-10-08).
-     *
-     * <p>Скользящее окно получается само: при ротации выдаётся новый токен, а ему Spring берёт срок
-     * из этой же настройки. Пользуешься — срок продлевается, забросил на месяц — вход заново.
-     */
-    private static final Duration REFRESH_TOKEN_LIFETIME = Duration.ofDays(30);
 
     private static final Set<String> DEFAULT_SCOPES =
             Set.of(OidcScopes.OPENID, OidcScopes.PROFILE, OidcScopes.EMAIL);
@@ -186,10 +175,10 @@ public class AdminClientService {
      */
     private static TokenSettings tokenSettings(ClientKind kind) {
         TokenSettings.Builder settings = TokenSettings.builder()
-                .accessTokenTimeToLive(ACCESS_TOKEN_LIFETIME);
+                .accessTokenTimeToLive(TokenLifetimes.ACCESS_TOKEN);
         if (kind.issuesRefreshTokens()) {
             settings.reuseRefreshTokens(false)
-                    .refreshTokenTimeToLive(REFRESH_TOKEN_LIFETIME);
+                    .refreshTokenTimeToLive(TokenLifetimes.REFRESH_TOKEN);
         }
         return settings.build();
     }

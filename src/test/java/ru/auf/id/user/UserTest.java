@@ -1,5 +1,6 @@
 package ru.auf.id.user;
 
+import ru.auf.id.TestTime;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -9,7 +10,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class UserTest {
 
-    private final User user = User.invited(new EmailAddress("ivan@sinhub.ru"), "Иван Петров");
+    private final User user = User.invited(new EmailAddress("ivan@sinhub.ru"), "Иван Петров", TestTime.NOW);
 
     @Test
     void invitedUserWaitsForActivation() {
@@ -66,7 +67,7 @@ class UserTest {
         user.block();
         assertThat(user.getStatus()).isEqualTo(UserStatus.BLOCKED);
 
-        User active = User.invited(new EmailAddress("oleg@sinhub.ru"), "Олег Сидоров");
+        User active = User.invited(new EmailAddress("oleg@sinhub.ru"), "Олег Сидоров", TestTime.NOW);
         active.activate();
         active.block();
         assertThat(active.getStatus()).isEqualTo(UserStatus.BLOCKED);

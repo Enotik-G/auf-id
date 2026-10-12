@@ -10,11 +10,13 @@ import io.lettuce.core.codec.RedisCodec;
 import io.lettuce.core.codec.StringCodec;
 import org.springframework.boot.data.redis.autoconfigure.DataRedisConnectionDetails;
 import org.springframework.boot.security.autoconfigure.web.servlet.SecurityFilterProperties;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import java.time.Duration;
+import java.util.Map;
 
 /**
  * Подключает Bucket4j к Redis и ставит {@link RateLimitFilter} перед Spring Security.
@@ -45,11 +47,14 @@ public class RateLimitConfiguration {
     }
 
     @Bean
-    RateLimiter rateLimiter(StatefulRedisConnection<String, byte[]> rateLimitRedisConnection) {
+    RateLimiter rateLimiter(StatefulRedisConnection<String, byte[]> rateLimitRedisConnection,
+                            @Value("${auth.rate-limit.login-per-minute}") int loginPerMinute,
+                            @Value("${auth.rate-limit.token-per-minute}") int tokenPerMinute) {
         return new RateLimiter(Bucket4jLettuce.casBasedBuilder(rateLimitRedisConnection)
                 // Полное ведро неотличимо от отсутствующего — такие ключи Redis удаляет сам.
                 .expirationAfterWrite(ExpirationAfterWriteStrategy.basedOnTimeForRefillingBucketUpToMax(Duration.ofSeconds(10)))
-                .build());
+                .build(),
+                Map.of(RateLimit.LOGIN, loginPerMinute, RateLimit.TOKEN, tokenPerMinute));
     }
 
     @Bean

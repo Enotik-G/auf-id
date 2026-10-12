@@ -17,8 +17,9 @@ import org.springframework.security.authentication.dao.DaoAuthenticationProvider
  * системе. Поэтому неактивный аккаунт (не {@code ACTIVE} — disabled) проверяем <b>после</b> пароля:
  * подсказку увидит только тот, кто знает пароль.
  *
- * <p>Временная блокировка (locked) — <b>до</b> пароля: отказ всегда один и тот же, верен пароль или нет,
- * так что при подборе заблокированный аккаунт не подсказывает, что догадка верна. Время ответа при этом
+ * <p>Статус {@code LOCKED} (locked) — <b>до</b> пароля: отказ всегда один и тот же, верен пароль или нет,
+ * так что при подборе закрытый аккаунт не подсказывает, что догадка верна. Сейчас в этот статус не
+ * переводит ничто (см. {@code UserStatus.LOCKED}), проверка — на будущее. Время ответа при этом
  * не отличается: Spring Security 7 даже после отказа на этой проверке всё равно проверяет пароль
  * (флаг {@code alwaysPerformAdditionalChecksOnUser}, включён по умолчанию) и отбрасывает результат.
  */
@@ -33,7 +34,7 @@ public class LoginConfiguration {
 
         provider.setPreAuthenticationChecks(user -> {
             if (!user.isAccountNonLocked()) {
-                throw new LockedException("Аккаунт временно заблокирован");
+                throw new LockedException("Аккаунт закрыт");
             }
         });
         provider.setPostAuthenticationChecks(user -> {

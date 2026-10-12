@@ -1,5 +1,6 @@
 package ru.auf.id.authserver;
 
+import ru.auf.id.Sha256;
 import org.springframework.security.oauth2.core.OAuth2AccessToken;
 import org.springframework.security.oauth2.core.OAuth2DeviceCode;
 import org.springframework.security.oauth2.core.OAuth2RefreshToken;
@@ -13,12 +14,8 @@ import org.springframework.security.oauth2.server.authorization.OAuth2Authorizat
 import org.springframework.security.oauth2.server.authorization.OAuth2AuthorizationService;
 import org.springframework.security.oauth2.server.authorization.OAuth2TokenType;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -118,7 +115,7 @@ public class HashedTokenAuthorizationService implements OAuth2AuthorizationServi
         }
 
         String previousValue = stored.getRefreshToken().getToken().getTokenValue();
-        if (previousValue.equals(hashed(incoming.getToken().getTokenValue()))) {
+        if (previousValue.equals(asStored(incoming.getToken().getTokenValue()))) {
             // Тот же токен сохраняют снова (например, при отзыве access-токена) — ротации не было.
             return;
         }
@@ -142,7 +139,7 @@ public class HashedTokenAuthorizationService implements OAuth2AuthorizationServi
         if (STATE.equals(tokenType)) {
             return delegate.findByToken(token, tokenType);
         }
-        String hashedToken = hash(token);
+        String hashedToken = hashOf(token);
         OAuth2Authorization found = delegate.findByToken(hashedToken, tokenType);
         if (found != null) {
             return withRawValue(found, token);
@@ -178,18 +175,14 @@ public class HashedTokenAuthorizationService implements OAuth2AuthorizationServi
             String value = token.getTokenValue();
             // Уже захешированное не хешируем повторно, но claims проверяем у всех токенов:
             // «значение сырое» и «claims свежие» — разные условия, и совпадают они не всегда.
-            OAuth2Token forStorage = isHash(value) ? token : withValue(token, hash(value));
-            builder.token(forStorage, HashedTokenAuthorizationService::removePersonalClaims);
+            OAuth2Token storedToken = isHash(value) ? token : withValue(token, hashOf(value));
+            builder.token(storedToken, HashedTokenAuthorizationService::removePersonalClaims);
         }
         return builder.build();
     }
 
     /**
-     * Убирает ФИО и почту из claims токена перед записью в БД (шаг 24).
-     *
-     * <p>Рядом со значением токена Spring хранит его claims обычным JSON — в колонках
-     * {@code access_token_metadata} и {@code oidc_id_token_metadata}. Хеширование значений их не
-     * закрывало: войти из дампа нельзя, а прочитать, кто есть кто, — можно.
+     * Убирает ФИО и почту из claims токена перед записью в БД (шаг 24, зачем — в описании класса).
      *
      * <p><b>Убираем только личное.</b> Служебные claims ({@code sub}, {@code aud}, {@code auth_time},
      * {@code sid} и прочие) остаются: по ним работает выход ({@code /connect/logout} сверяет
@@ -221,7 +214,7 @@ public class HashedTokenAuthorizationService implements OAuth2AuthorizationServi
 
     /** Копия найденной авторизации, где у предъявленного токена вместо хеша снова его настоящее значение. */
     private static OAuth2Authorization withRawValue(OAuth2Authorization authorization, String rawValue) {
-        String hashedValue = hash(rawValue);
+        String hashedValue = hashOf(rawValue);
         OAuth2Authorization.Builder builder = OAuth2Authorization.from(authorization);
         for (Class<? extends OAuth2Token> tokenClass : TOKEN_CLASSES) {
             OAuth2Authorization.Token<? extends OAuth2Token> stored = authorization.getToken(tokenClass);
@@ -257,17 +250,12 @@ public class HashedTokenAuthorizationService implements OAuth2AuthorizationServi
     }
 
     /** Значение в том виде, в каком оно лежит в БД: уже хеш — как есть, сырое — хешируем. */
-    private static String hashed(String value) {
-        return isHash(value) ? value : hash(value);
+    private static String asStored(String value) {
+        return isHash(value) ? value : hashOf(value);
     }
 
-    static String hash(String value) {
-        try {
-            byte[] digest = MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8));
-            return HASH_PREFIX + HexFormat.of().formatHex(digest);
-        } catch (NoSuchAlgorithmException e) {
-            // SHA-256 обязана быть в любой Java — сюда не попадём.
-            throw new IllegalStateException(e);
-        }
+    /** Хеш с пометкой {@value #HASH_PREFIX} — по ней хеш отличается от сырого значения. */
+    static String hashOf(String value) {
+        return HASH_PREFIX + Sha256.hex(value);
     }
 }

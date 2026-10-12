@@ -1,5 +1,7 @@
 package ru.auf.id.admin;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 /**
  * Зарегистрированный клиент и его секрет.
  *
@@ -9,5 +11,14 @@ package ru.auf.id.admin;
  * @param secret {@code null} только у вида {@code BROWSER}: вкладке секрет спрятать негде.
  *               Настольное приложение ({@code NATIVE}) секрет получает — см. {@link ClientKind#NATIVE}
  */
-public record ClientCredentials(String clientId, String secret) {
+@Schema(description = "Клиент и его секрет. Секрет показывается один раз — сохраните его сразу")
+public record ClientCredentials(
+
+        @Schema(description = "Идентификатор клиента", example = "planner")
+        String clientId,
+
+        @Schema(description = "Секрет клиента; null у вида BROWSER — вкладке браузера его негде спрятать",
+                nullable = true)
+        String secret
+) {
 }

@@ -1,5 +1,6 @@
 package ru.auf.id.admin;
 
+import ru.auf.id.TestTime;
 import ru.auf.id.ClockConfiguration;
 import ru.auf.id.TestcontainersConfiguration;
 import ru.auf.id.authserver.UserAuthorizationRevoker;
@@ -213,15 +214,15 @@ class AdminUserServiceTest {
     }
 
     private User activeUser(String email) {
-        User user = User.invited(new EmailAddress(email), "Кто-то");
+        User user = User.invited(new EmailAddress(email), "Кто-то", TestTime.NOW);
         user.activate();
         User saved = userRepository.save(user);
-        credentialRepository.save(PasswordCredential.forUser(saved, passwordHasher.hash("correct horse battery staple")));
+        credentialRepository.save(PasswordCredential.forUser(saved, passwordHasher.hash("correct horse battery staple"), TestTime.NOW));
         return saved;
     }
 
     private User invitedUser(String email) {
-        return userRepository.save(User.invited(new EmailAddress(email), "Приглашённый"));
+        return userRepository.save(User.invited(new EmailAddress(email), "Приглашённый", TestTime.NOW));
     }
 
     private User reload(User user) {

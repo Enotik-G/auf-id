@@ -63,7 +63,7 @@ class AdminApiCsrfTest {
     @Test
     @WithMockUser(roles = "ADMIN")
     void jsonResponseSetsCsrfCookieReadableByScripts() throws Exception {
-        when(adminUsers.get(USER_ID)).thenReturn(User.invited(new EmailAddress("ivan@sinhub.ru"), "Иван Петров"));
+        when(adminUsers.get(USER_ID)).thenReturn(User.invited(new EmailAddress("ivan@sinhub.ru"), "Иван Петров", TestTime.NOW));
 
         Cookie csrfCookie = mockMvc.perform(get("/api/v1/admin/users/" + USER_ID))
                 .andExpect(status().isOk())
