@@ -25,13 +25,13 @@ class UserRepositoryTest {
 
     @Test
     void savesAndLoadsSelfRegisteredUser() {
-        User saved = userRepository.save(User.invited(new EmailAddress("ivan@mail.ru"), "Иван Петров"));
+        User saved = userRepository.save(User.invited(new EmailAddress("ivan@sinhub.ru"), "Иван Петров"));
         entityManager.flush();
         entityManager.clear();
 
         User loaded = userRepository.findById(saved.getId()).orElseThrow();
 
-        assertThat(loaded.getEmail()).isEqualTo(new EmailAddress("ivan@mail.ru"));
+        assertThat(loaded.getEmail()).isEqualTo(new EmailAddress("ivan@sinhub.ru"));
         assertThat(loaded.getFullName()).isEqualTo("Иван Петров");
         assertThat(loaded.getStatus()).isEqualTo(UserStatus.INVITED);
         assertThat(loaded.isEmailVerified()).isFalse();
@@ -41,20 +41,20 @@ class UserRepositoryTest {
 
     @Test
     void findsUserByEmailTypedDifferently() {
-        userRepository.save(User.invited(new EmailAddress("ivan@mail.ru"), "Иван Петров"));
+        userRepository.save(User.invited(new EmailAddress("ivan@sinhub.ru"), "Иван Петров"));
         entityManager.flush();
         entityManager.clear();
 
-        assertThat(userRepository.findByEmail(new EmailAddress("  IVAN@Mail.RU "))).isPresent();
-        assertThat(userRepository.existsByEmail(new EmailAddress("Ivan@mail.ru"))).isTrue();
-        assertThat(userRepository.existsByEmail(new EmailAddress("petr@mail.ru"))).isFalse();
+        assertThat(userRepository.findByEmail(new EmailAddress("  IVAN@Sinhub.RU "))).isPresent();
+        assertThat(userRepository.existsByEmail(new EmailAddress("Ivan@sinhub.ru"))).isTrue();
+        assertThat(userRepository.existsByEmail(new EmailAddress("petr@sinhub.ru"))).isFalse();
     }
 
     @Test
     void rejectsSecondUserWithSameEmail() {
-        userRepository.saveAndFlush(User.invited(new EmailAddress("ivan@mail.ru"), "Иван Петров"));
+        userRepository.saveAndFlush(User.invited(new EmailAddress("ivan@sinhub.ru"), "Иван Петров"));
 
-        User duplicate = User.invited(new EmailAddress("IVAN@mail.ru"), "Другой Иван");
+        User duplicate = User.invited(new EmailAddress("IVAN@sinhub.ru"), "Другой Иван");
 
         assertThatThrownBy(() -> userRepository.saveAndFlush(duplicate))
                 .isInstanceOf(DataIntegrityViolationException.class);
@@ -62,7 +62,7 @@ class UserRepositoryTest {
 
     @Test
     void rolesSurviveSaveAndLoad() {
-        User user = User.invited(new EmailAddress("curator@college.ru"), "Олег Сидоров");
+        User user = User.invited(new EmailAddress("curator@sinhub.ru"), "Олег Сидоров");
         user.grantRole(Role.CURATOR);
         user.grantRole(Role.STUDENT);
         User saved = userRepository.save(user);
@@ -76,7 +76,7 @@ class UserRepositoryTest {
 
     @Test
     void revokedRoleDisappearsFromDatabase() {
-        User user = User.invited(new EmailAddress("admin@college.ru"), "Анна Петрова");
+        User user = User.invited(new EmailAddress("admin@sinhub.ru"), "Анна Петрова");
         user.grantRole(Role.ADMIN);
         User saved = userRepository.save(user);
         entityManager.flush();
@@ -94,7 +94,7 @@ class UserRepositoryTest {
     /** Роли читаются сразу с пользователем, поэтому их видно и за пределами транзакции репозитория. */
     @Test
     void rolesAreLoadedEagerly() {
-        User user = User.invited(new EmailAddress("eager@college.ru"), "Иван Иванов");
+        User user = User.invited(new EmailAddress("eager@sinhub.ru"), "Иван Иванов");
         user.grantRole(Role.STUDENT);
         UUID id = userRepository.save(user).getId();
         entityManager.flush();

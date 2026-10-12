@@ -52,7 +52,7 @@ class AdminUserServiceTest {
 
     @Test
     void blocksUser() {
-        User student = activeUser("ivan@mail.ru");
+        User student = activeUser("ivan@sinhub.ru");
 
         admin.block(student.getId());
 
@@ -62,8 +62,8 @@ class AdminUserServiceTest {
     /** Выданные коды и токены не должны пережить блокировку: до refresh-токенов это закрываем заранее. */
     @Test
     void blockingRevokesIssuedAuthorizations() {
-        User student = activeUser("ivan@mail.ru");
-        User other = activeUser("petr@mail.ru");
+        User student = activeUser("ivan@sinhub.ru");
+        User other = activeUser("petr@sinhub.ru");
         insertAuthorization(student);
         insertAuthorization(other);
 
@@ -76,7 +76,7 @@ class AdminUserServiceTest {
     /** Неиспользованная ссылка — это отложенный вход: заблокировали, а он активировался через час. */
     @Test
     void blockingRevokesPendingLinks() {
-        User invited = invitedUser("new@college.ru");
+        User invited = invitedUser("new@sinhub.ru");
         String activationLink = tokenService.issue(invited, TokenPurpose.INVITE);
 
         admin.block(invited.getId());
@@ -87,7 +87,7 @@ class AdminUserServiceTest {
 
     @Test
     void unblockingRestoresActiveAccount() {
-        User student = activeUser("ivan@mail.ru");
+        User student = activeUser("ivan@sinhub.ru");
         admin.block(student.getId());
 
         admin.unblock(student.getId());
@@ -98,7 +98,7 @@ class AdminUserServiceTest {
     /** Без пароля «активный» аккаунт выглядел бы исправным, а войти в него было бы нельзя. */
     @Test
     void unblockingAccountWithoutPasswordReturnsItToInvited() {
-        User invited = invitedUser("new@college.ru");
+        User invited = invitedUser("new@sinhub.ru");
         admin.block(invited.getId());
 
         admin.unblock(invited.getId());
@@ -108,7 +108,7 @@ class AdminUserServiceTest {
 
     @Test
     void refusesToUnblockUserThatIsNotBlocked() {
-        User student = activeUser("ivan@mail.ru");
+        User student = activeUser("ivan@sinhub.ru");
 
         assertThatThrownBy(() -> admin.unblock(student.getId()))
                 .isInstanceOf(IllegalStateException.class);
@@ -116,7 +116,7 @@ class AdminUserServiceTest {
 
     @Test
     void grantsAndRevokesRole() {
-        User student = activeUser("ivan@mail.ru");
+        User student = activeUser("ivan@sinhub.ru");
 
         admin.grantRole(student.getId(), Role.CURATOR);
         assertThat(reload(student).getRoles()).containsExactly(Role.CURATOR);
@@ -127,7 +127,7 @@ class AdminUserServiceTest {
 
     @Test
     void refusesToRevokeAdminRoleFromTheLastAdmin() {
-        User onlyAdmin = activeUser("boss@college.ru");
+        User onlyAdmin = activeUser("boss@sinhub.ru");
         admin.grantRole(onlyAdmin.getId(), Role.ADMIN);
 
         assertThatThrownBy(() -> admin.revokeRole(onlyAdmin.getId(), Role.ADMIN))
@@ -137,7 +137,7 @@ class AdminUserServiceTest {
 
     @Test
     void refusesToBlockTheLastAdmin() {
-        User onlyAdmin = activeUser("boss@college.ru");
+        User onlyAdmin = activeUser("boss@sinhub.ru");
         admin.grantRole(onlyAdmin.getId(), Role.ADMIN);
 
         assertThatThrownBy(() -> admin.block(onlyAdmin.getId()))
@@ -147,8 +147,8 @@ class AdminUserServiceTest {
 
     @Test
     void allowsRevokingAdminRoleWhenAnotherAdminRemains() {
-        User first = activeUser("boss@college.ru");
-        User second = activeUser("deputy@college.ru");
+        User first = activeUser("boss@sinhub.ru");
+        User second = activeUser("deputy@sinhub.ru");
         admin.grantRole(first.getId(), Role.ADMIN);
         admin.grantRole(second.getId(), Role.ADMIN);
 
@@ -160,8 +160,8 @@ class AdminUserServiceTest {
     /** Заблокированный администратор — всё равно что отсутствующий, поэтому последним не считается. */
     @Test
     void blockedAdminDoesNotCountAsRemainingAdmin() {
-        User working = activeUser("boss@college.ru");
-        User blocked = activeUser("retired@college.ru");
+        User working = activeUser("boss@sinhub.ru");
+        User blocked = activeUser("retired@sinhub.ru");
         admin.grantRole(working.getId(), Role.ADMIN);
         admin.grantRole(blocked.getId(), Role.ADMIN);
         admin.block(blocked.getId());
@@ -173,7 +173,7 @@ class AdminUserServiceTest {
     /** Защита касается только роли ADMIN: остальные роли снимаются свободно. */
     @Test
     void protectionAppliesOnlyToTheAdminRole() {
-        User onlyAdmin = activeUser("boss@college.ru");
+        User onlyAdmin = activeUser("boss@sinhub.ru");
         admin.grantRole(onlyAdmin.getId(), Role.ADMIN);
         admin.grantRole(onlyAdmin.getId(), Role.CURATOR);
 

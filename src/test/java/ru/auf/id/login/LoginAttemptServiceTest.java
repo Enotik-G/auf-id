@@ -15,7 +15,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @Import({TestcontainersConfiguration.class, LoginAttemptService.class})
 class LoginAttemptServiceTest {
 
-    private static final EmailAddress IVAN = new EmailAddress("ivan@mail.ru");
+    private static final EmailAddress IVAN = new EmailAddress("ivan@sinhub.ru");
 
     @Autowired
     private LoginAttemptService loginAttempts;
@@ -52,7 +52,7 @@ class LoginAttemptServiceTest {
 
     @Test
     void emailTypedDifferentlyIsTheSameCounter() {
-        failTimes(new EmailAddress("IVAN@Mail.ru"), 3);
+        failTimes(new EmailAddress("IVAN@Sinhub.ru"), 3);
 
         assertThat(loginAttempts.isCaptchaRequired(IVAN)).isTrue();
     }
@@ -61,7 +61,7 @@ class LoginAttemptServiceTest {
     void failuresForOneEmailDoNotAffectAnother() {
         failTimes(IVAN, 3);
 
-        assertThat(loginAttempts.isCaptchaRequired(new EmailAddress("petr@mail.ru"))).isFalse();
+        assertThat(loginAttempts.isCaptchaRequired(new EmailAddress("petr@sinhub.ru"))).isFalse();
     }
 
     @Test

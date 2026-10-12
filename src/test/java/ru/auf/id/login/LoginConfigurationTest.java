@@ -44,11 +44,11 @@ class LoginConfigurationTest {
     }
 
     private void lockedUser() {
-        when(userDetailsService.loadUserByUsername("ivan@mail.ru")).thenReturn(User.withUsername("some-id")
+        when(userDetailsService.loadUserByUsername("ivan@sinhub.ru")).thenReturn(User.withUsername("some-id")
                 .password(REAL_HASH).accountLocked(true).build());
     }
 
     private void login(String password) {
-        provider.authenticate(UsernamePasswordAuthenticationToken.unauthenticated("ivan@mail.ru", password));
+        provider.authenticate(UsernamePasswordAuthenticationToken.unauthenticated("ivan@sinhub.ru", password));
     }
 }

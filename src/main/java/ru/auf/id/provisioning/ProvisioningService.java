@@ -3,6 +3,7 @@ package ru.auf.id.provisioning;
 import ru.auf.id.onetimetoken.InvalidOneTimeTokenException;
 import ru.auf.id.onetimetoken.OneTimeTokenService;
 import ru.auf.id.onetimetoken.TokenPurpose;
+import ru.auf.id.user.AllowedEmailDomains;
 import ru.auf.id.user.EmailAddress;
 import ru.auf.id.user.PasswordCredential;
 import ru.auf.id.user.PasswordCredentialRepository;
@@ -33,6 +34,7 @@ public class ProvisioningService {
     private final PasswordCredentialRepository credentialRepository;
     private final PasswordHasher passwordHasher;
     private final OneTimeTokenService tokenService;
+    private final AllowedEmailDomains allowedDomains;
 
     /**
      * Создаёт учётку в статусе {@code INVITED} и выдаёт токен активации.
@@ -45,6 +47,7 @@ public class ProvisioningService {
      */
     @Transactional
     public Invitation invite(EmailAddress email, String fullName, Set<Role> roles) {
+        allowedDomains.requireAllowed(email);
         if (userRepository.existsByEmail(email)) {
             throw new EmailAlreadyTakenException(email);
         }

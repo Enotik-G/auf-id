@@ -41,7 +41,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @Import(TestcontainersConfiguration.class)
 class SessionUserRevalidationTest {
 
-    private static final String EMAIL = "admin@mail.ru";
+    private static final String EMAIL = "admin@sinhub.ru";
     private static final String PASSWORD = "correct horse battery staple";
 
     @Autowired
