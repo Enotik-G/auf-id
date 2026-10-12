@@ -1,5 +1,6 @@
 package ru.auf.id.authserver;
 
+import ru.auf.id.admin.AdminUserService;
 import ru.auf.id.TestTime;
 import ru.auf.id.TestcontainersConfiguration;
 import ru.auf.id.user.EmailAddress;
@@ -101,6 +102,9 @@ class AuthorizationServerTest {
 
     @Autowired
     private DevClientRegistration devClientRegistration;
+
+    @Autowired
+    private AdminUserService adminUserService;
 
     @AfterEach
     void cleanUp() {
@@ -458,6 +462,25 @@ class AuthorizationServerTest {
         mockMvc.perform(get("/oauth2/authorize").queryParams(authorizeParams()).session(session))
                 .andExpect(status().is3xxRedirection())
                 .andExpect(redirectedUrl("/login"));
+    }
+
+    /**
+     * Сервис, которому 10 минут жизни токена после блокировки слишком много, может спросить AUF ID
+     * о токене (introspection, RFC 7662) — это обещано в {@code docs/service-integration.md}.
+     * Блокировка удаляет авторизацию, и токен перестаёт быть активным сразу.
+     */
+    @Test
+    void introspectionReportsTokenOfBlockedUserAsInactive() throws Exception {
+        String accessToken = JsonPath.read(exchangeCodeForTokens(authorize()), "$.access_token");
+        mockMvc.perform(post("/oauth2/introspect").with(clientSecret()).param("token", accessToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.active").value(true));
+
+        adminUserService.block(user.getId());
+
+        mockMvc.perform(post("/oauth2/introspect").with(clientSecret()).param("token", accessToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.active").value(false));
     }
 
     /** Refresh-токен, выданный до блокировки, новых токенов не даёт. */
