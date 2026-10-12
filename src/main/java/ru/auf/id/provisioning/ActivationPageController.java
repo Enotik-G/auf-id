@@ -1,6 +1,7 @@
 package ru.auf.id.provisioning;
 
 import ru.auf.id.onetimetoken.InvalidOneTimeTokenException;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -39,6 +40,8 @@ public class ActivationPageController {
     public String setPassword(@RequestParam String token,
                               @RequestParam String password,
                               @RequestParam String passwordConfirmation,
+                              @RequestParam(defaultValue = "false") boolean consent,
+                              HttpServletRequest request,
                               Model model) {
         switch (passwordPolicy.check(password)) {
             case WRONG_LENGTH -> {
@@ -57,8 +60,14 @@ public class ActivationPageController {
             return showState(model, "mismatch", token);
         }
 
+        // Без согласия на обработку ПДн учётку не активируем (152-ФЗ): без него данные человека
+        // обрабатывать нельзя. Галочка обязательна и в форме, но форму можно отправить и мимо браузера.
+        if (!consent) {
+            return showState(model, "consent", token);
+        }
+
         try {
-            provisioning.activate(token, password);
+            provisioning.activate(token, password, request.getRemoteAddr());
         } catch (InvalidOneTimeTokenException e) {
             return showState(model, "invalid", null);
         }

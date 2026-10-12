@@ -3,6 +3,9 @@ package ru.auf.id.provisioning;
 import ru.auf.id.user.AllowedEmailDomains;
 import ru.auf.id.ClockConfiguration;
 import ru.auf.id.TestcontainersConfiguration;
+import ru.auf.id.consent.ConsentDocument;
+import ru.auf.id.consent.ConsentRepository;
+import ru.auf.id.consent.ConsentService;
 import ru.auf.id.onetimetoken.OneTimeTokenRepository;
 import ru.auf.id.onetimetoken.InvalidOneTimeTokenException;
 import ru.auf.id.onetimetoken.OneTimeTokenService;
@@ -29,8 +32,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @DataJpaTest
 @Import({TestcontainersConfiguration.class, AllowedEmailDomains.class, ClockConfiguration.class,
-        ProvisioningService.class, OneTimeTokenService.class, PasswordHasher.class})
+        ProvisioningService.class, OneTimeTokenService.class, PasswordHasher.class, ConsentService.class})
 class ProvisioningServiceTest {
+
+    private static final String CLIENT_IP = "203.0.113.5";
 
     private static final EmailAddress EMAIL = new EmailAddress("student@sinhub.ru");
 
@@ -51,6 +56,12 @@ class ProvisioningServiceTest {
 
     @Autowired
     private OneTimeTokenService tokenService;
+
+    @Autowired
+    private ConsentRepository consentRepository;
+
+    @Autowired
+    private ConsentService consentService;
 
     @Test
     void createsAccountAwaitingActivation() {
@@ -141,7 +152,7 @@ class ProvisioningServiceTest {
     void activationSetsPasswordAndActivatesAccount() {
         Invitation invitation = provisioning.invite(EMAIL, "Иван Иванов", Set.of(Role.STUDENT));
 
-        provisioning.activate(invitation.activationToken(), "correct horse battery staple");
+        provisioning.activate(invitation.activationToken(), "correct horse battery staple", CLIENT_IP);
 
         User activated = userRepository.findById(invitation.userId()).orElseThrow();
         assertThat(activated.getStatus()).isEqualTo(UserStatus.ACTIVE);
@@ -153,12 +164,41 @@ class ProvisioningServiceTest {
                                 .isTrue());
     }
 
+    /**
+     * Согласие на обработку ПДн записывается вместе с паролем: документ, версия текста, время и
+     * адрес — то, что нужно, чтобы по записи доказать, на что и когда человек согласился.
+     */
+    @Test
+    void activationRecordsPersonalDataConsent() {
+        Invitation invitation = provisioning.invite(EMAIL, "Иван Иванов", Set.of());
+
+        provisioning.activate(invitation.activationToken(), "correct horse battery staple", CLIENT_IP);
+
+        assertThat(consentRepository.findByUserId(invitation.userId()))
+                .singleElement()
+                .satisfies(consent -> {
+                    assertThat(consent.getDocument()).isEqualTo(ConsentDocument.PERSONAL_DATA);
+                    assertThat(consent.getDocumentVersion()).isEqualTo(consentService.personalDataVersion());
+                    assertThat(consent.getIp()).isEqualTo(CLIENT_IP);
+                    assertThat(consent.getAcceptedAt()).isNotNull();
+                });
+    }
+
+    /** Ссылка недействительна — ни пароля, ни согласия. */
+    @Test
+    void failedActivationRecordsNoConsent() {
+        assertThatThrownBy(() -> provisioning.activate("never-issued-token", "correct horse battery staple", CLIENT_IP))
+                .isInstanceOf(InvalidOneTimeTokenException.class);
+
+        assertThat(consentRepository.count()).isZero();
+    }
+
     /** Перешедший по ссылке не владеет ящиком — админ лишь назначил ему адрес. */
     @Test
     void activationDoesNotMarkEmailAsVerified() {
         Invitation invitation = provisioning.invite(EMAIL, "Иван Иванов", Set.of());
 
-        provisioning.activate(invitation.activationToken(), "correct horse battery staple");
+        provisioning.activate(invitation.activationToken(), "correct horse battery staple", CLIENT_IP);
 
         assertThat(userRepository.findById(invitation.userId()).orElseThrow().isEmailVerified()).isFalse();
     }
@@ -166,15 +206,15 @@ class ProvisioningServiceTest {
     @Test
     void sameLinkCannotBeUsedTwice() {
         Invitation invitation = provisioning.invite(EMAIL, "Иван Иванов", Set.of());
-        provisioning.activate(invitation.activationToken(), "correct horse battery staple");
+        provisioning.activate(invitation.activationToken(), "correct horse battery staple", CLIENT_IP);
 
-        assertThatThrownBy(() -> provisioning.activate(invitation.activationToken(), "another password"))
+        assertThatThrownBy(() -> provisioning.activate(invitation.activationToken(), "another password", CLIENT_IP))
                 .isInstanceOf(InvalidOneTimeTokenException.class);
     }
 
     @Test
     void refusesUnknownToken() {
-        assertThatThrownBy(() -> provisioning.activate("never-issued", "correct horse battery staple"))
+        assertThatThrownBy(() -> provisioning.activate("never-issued", "correct horse battery staple", CLIENT_IP))
                 .isInstanceOf(InvalidOneTimeTokenException.class);
     }
 
@@ -187,9 +227,9 @@ class ProvisioningServiceTest {
         Invitation first = provisioning.invite(EMAIL, "Иван Иванов", Set.of());
         User user = userRepository.findById(first.userId()).orElseThrow();
         String secondLink = tokenService.issue(user, TokenPurpose.INVITE);
-        provisioning.activate(first.activationToken(), "correct horse battery staple");
+        provisioning.activate(first.activationToken(), "correct horse battery staple", CLIENT_IP);
 
-        assertThatThrownBy(() -> provisioning.activate(secondLink, "attacker password"))
+        assertThatThrownBy(() -> provisioning.activate(secondLink, "attacker password", CLIENT_IP))
                 .isInstanceOf(InvalidOneTimeTokenException.class);
     }
 
@@ -202,10 +242,10 @@ class ProvisioningServiceTest {
         assertThat(second.userId()).isEqualTo(first.userId());
         assertThat(second.activationToken()).isNotEqualTo(first.activationToken());
 
-        assertThatThrownBy(() -> provisioning.activate(first.activationToken(), "correct horse battery staple"))
+        assertThatThrownBy(() -> provisioning.activate(first.activationToken(), "correct horse battery staple", CLIENT_IP))
                 .isInstanceOf(InvalidOneTimeTokenException.class);
 
-        provisioning.activate(second.activationToken(), "correct horse battery staple");
+        provisioning.activate(second.activationToken(), "correct horse battery staple", CLIENT_IP);
         assertThat(userRepository.findById(first.userId()).orElseThrow().getStatus())
                 .isEqualTo(UserStatus.ACTIVE);
     }
@@ -217,12 +257,12 @@ class ProvisioningServiceTest {
         Invitation second = provisioning.reissueInvitation(first.userId());
         Invitation third = provisioning.reissueInvitation(first.userId());
 
-        assertThatThrownBy(() -> provisioning.activate(first.activationToken(), "correct horse battery staple"))
+        assertThatThrownBy(() -> provisioning.activate(first.activationToken(), "correct horse battery staple", CLIENT_IP))
                 .isInstanceOf(InvalidOneTimeTokenException.class);
-        assertThatThrownBy(() -> provisioning.activate(second.activationToken(), "correct horse battery staple"))
+        assertThatThrownBy(() -> provisioning.activate(second.activationToken(), "correct horse battery staple", CLIENT_IP))
                 .isInstanceOf(InvalidOneTimeTokenException.class);
 
-        provisioning.activate(third.activationToken(), "correct horse battery staple");
+        provisioning.activate(third.activationToken(), "correct horse battery staple", CLIENT_IP);
         assertThat(userRepository.findById(first.userId()).orElseThrow().getStatus())
                 .isEqualTo(UserStatus.ACTIVE);
     }
@@ -236,7 +276,7 @@ class ProvisioningServiceTest {
     @Test
     void refusesReissueForAlreadyActiveAccount() {
         Invitation invitation = provisioning.invite(EMAIL, "Иван Иванов", Set.of());
-        provisioning.activate(invitation.activationToken(), "correct horse battery staple");
+        provisioning.activate(invitation.activationToken(), "correct horse battery staple", CLIENT_IP);
 
         assertThatThrownBy(() -> provisioning.reissueInvitation(invitation.userId()))
                 .isInstanceOf(IllegalStateException.class)

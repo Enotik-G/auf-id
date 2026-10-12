@@ -38,6 +38,8 @@ public class SecurityConfiguration {
                 .authorizeHttpRequests(requests -> requests
                         // Активация выданной админом учётки: человек ещё не может войти — пароля у него нет.
                         .requestMatchers("/activate", "/activate/done").permitAll()
+                        // Текст согласия на обработку ПДн — его читают до активации, то есть без входа.
+                        .requestMatchers(HttpMethod.GET, "/consent/personal-data").permitAll()
                         // Страница входа — со всеми вариантами адреса (?error, ?blocked, ?logout):
                         // permitAll() у formLogin открывает только адрес /login без параметров.
                         .requestMatchers("/login").permitAll()

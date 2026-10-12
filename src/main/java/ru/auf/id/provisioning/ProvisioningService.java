@@ -1,5 +1,6 @@
 package ru.auf.id.provisioning;
 
+import ru.auf.id.consent.ConsentService;
 import ru.auf.id.onetimetoken.InvalidOneTimeTokenException;
 import ru.auf.id.onetimetoken.OneTimeTokenService;
 import ru.auf.id.onetimetoken.TokenPurpose;
@@ -39,6 +40,7 @@ public class ProvisioningService {
     private final OneTimeTokenService tokenService;
     private final AllowedEmailDomains allowedDomains;
     private final Clock clock;
+    private final ConsentService consentService;
 
     /**
      * Создаёт учётку в статусе {@code INVITED} и выдаёт токен активации.
@@ -87,22 +89,25 @@ public class ProvisioningService {
     }
 
     /**
-     * Переход по ссылке активации: гасит токен, сохраняет пароль и делает учётку активной.
+     * Переход по ссылке активации: гасит токен, сохраняет пароль и согласие на обработку ПДн и
+     * делает учётку активной — всё в одной транзакции.
      *
      * <p>Проверка статуса обязательна вместе с проверкой токена: учётку могли заблокировать или уже
      * активировать после того, как ссылку выдали. Причину наружу не различаем — для перешедшего по
      * ссылке это одинаковое «ссылка недействительна».
      *
+     * @param clientIp адрес, с которого дано согласие, — пишется в запись о согласии
      * @throws InvalidOneTimeTokenException если ссылка недействительна, использована, устарела
      *                                      или учётка уже не ждёт активации
      */
     @Transactional
-    public void activate(String rawToken, String rawPassword) {
+    public void activate(String rawToken, String rawPassword, String clientIp) {
         User user = tokenService.consume(rawToken, TokenPurpose.INVITE);
         if (user.getStatus() != UserStatus.INVITED) {
             throw new InvalidOneTimeTokenException();
         }
         credentialRepository.save(PasswordCredential.forUser(user, passwordHasher.hash(rawPassword), Instant.now(clock)));
+        consentService.recordPersonalDataConsent(user, clientIp);
         user.activate();
     }
 }
