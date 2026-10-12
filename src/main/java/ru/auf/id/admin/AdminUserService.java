@@ -3,6 +3,10 @@ package ru.auf.id.admin;
 import ru.auf.id.authserver.UserAuthorizationRevoker;
 import ru.auf.id.onetimetoken.OneTimeTokenService;
 import ru.auf.id.onetimetoken.TokenPurpose;
+import ru.auf.id.provisioning.EmailAlreadyTakenException;
+import ru.auf.id.user.AllowedEmailDomains;
+import ru.auf.id.user.EmailAddress;
+import ru.auf.id.user.InvalidEmailException;
 import ru.auf.id.user.PasswordCredentialRepository;
 import ru.auf.id.user.Role;
 import ru.auf.id.user.User;
@@ -10,13 +14,16 @@ import ru.auf.id.user.UserNotFoundException;
 import ru.auf.id.user.UserRepository;
 import ru.auf.id.user.UserStatus;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Locale;
 import java.util.UUID;
 
 /**
- * Действия администратора над учётными записями: блокировка и роли.
+ * Действия администратора над учётными записями: список и правка, блокировка, роли.
  *
  * <p>Выдача новых учёток и ссылок активации — в {@code ProvisioningService}: это разные зоны
  * ответственности, хотя обе доступны администратору.
@@ -29,6 +36,7 @@ public class AdminUserService {
     private final PasswordCredentialRepository credentialRepository;
     private final OneTimeTokenService tokenService;
     private final UserAuthorizationRevoker authorizationRevoker;
+    private final AllowedEmailDomains allowedDomains;
 
     /**
      * Закрывает доступ и обесценивает ожидающие ссылки.
@@ -75,6 +83,61 @@ public class AdminUserService {
     @Transactional(readOnly = true)
     public User get(UUID userId) {
         return find(userId);
+    }
+
+    /**
+     * Страница пользователей: по подстроке в ФИО или почте и по статусу, по алфавиту почт.
+     *
+     * @param query  что искать, без учёта регистра; {@code null} или пусто — всех
+     * @param status какой статус; {@code null} — любой
+     */
+    @Transactional(readOnly = true)
+    public Page<User> list(String query, UserStatus status, Pageable pageable) {
+        return userRepository.search(likePattern(query), status, pageable);
+    }
+
+    /**
+     * Исправляет ФИО и/или почту. Поле {@code null} — не менять.
+     *
+     * <p>Почта — это и логин, поэтому к новой те же требования, что при создании: домен колледжа и
+     * не занята другой учёткой. Заблокированному тоже можно исправить данные — это не вход.
+     *
+     * @throws InvalidEmailException       почта некорректна или не в домене колледжа
+     * @throws EmailAlreadyTakenException  почта занята другой учёткой
+     */
+    @Transactional
+    public User update(UUID userId, String fullName, String email) {
+        User user = find(userId);
+        if (fullName != null) {
+            user.rename(fullName.strip());
+        }
+        if (email != null) {
+            EmailAddress newEmail = new EmailAddress(email);
+            allowedDomains.requireAllowed(newEmail);
+            boolean takenBySomeoneElse = userRepository.findByEmail(newEmail)
+                    .filter(owner -> !owner.getId().equals(userId))
+                    .isPresent();
+            if (takenBySomeoneElse) {
+                throw new EmailAlreadyTakenException(newEmail);
+            }
+            user.changeEmail(newEmail);
+        }
+        return user;
+    }
+
+    /**
+     * Шаблон LIKE из того, что ввёл админ: в нижнем регистре, со звёздочками по краям, а свои
+     * {@code %} и {@code _} — экранированы, чтобы искаться как обычные символы.
+     */
+    private static String likePattern(String query) {
+        if (query == null || query.isBlank()) {
+            return null;
+        }
+        String escaped = query.strip().toLowerCase(Locale.ROOT)
+                .replace("\\", "\\\\")
+                .replace("%", "\\%")
+                .replace("_", "\\_");
+        return "%" + escaped + "%";
     }
 
     @Transactional
