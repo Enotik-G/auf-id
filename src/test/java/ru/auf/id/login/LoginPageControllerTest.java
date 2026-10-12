@@ -1,6 +1,8 @@
 package ru.auf.id.login;
 
+import ru.auf.id.user.UserRepository;
 import ru.auf.id.SecurityConfiguration;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -16,6 +18,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @WebMvcTest(LoginPageController.class)
 @Import(SecurityConfiguration.class)
 class LoginPageControllerTest {
+
+    /** Нужен фильтру перепроверки сессии, который ставит SecurityConfiguration. */
+    @MockitoBean
+    private UserRepository userRepository;
 
     @Autowired
     private MockMvc mockMvc;

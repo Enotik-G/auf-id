@@ -1,5 +1,6 @@
 package ru.auf.id.provisioning;
 
+import ru.auf.id.user.UserRepository;
 import ru.auf.id.SecurityConfiguration;
 import ru.auf.id.onetimetoken.InvalidOneTimeTokenException;
 import org.junit.jupiter.api.Test;
@@ -23,6 +24,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @WebMvcTest(ActivationPageController.class)
 @Import(SecurityConfiguration.class)
 class ActivationPageControllerTest {
+
+    /** Нужен фильтру перепроверки сессии, который ставит SecurityConfiguration. */
+    @MockitoBean
+    private UserRepository userRepository;
 
     private static final String TOKEN = "activation-token";
     private static final String PASSWORD = "correct horse battery staple";

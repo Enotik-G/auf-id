@@ -1,5 +1,7 @@
 package ru.auf.id;
 
+import ru.auf.id.login.SessionUserRevalidationFilter;
+import ru.auf.id.user.UserRepository;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Bean;
@@ -11,6 +13,7 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.context.SecurityContextHolderFilter;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
@@ -27,8 +30,11 @@ public class SecurityConfiguration {
     /** Вторая по очереди: первой идёт цепочка сервера авторизации (authserver/AuthorizationServerConfiguration). */
     @Bean
     @Order(2)
-    SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    SecurityFilterChain securityFilterChain(HttpSecurity http, UserRepository userRepository) throws Exception {
         http
+                // Сверять вошедшего с БД на каждом запросе: заблокированного — выпустить из сессии,
+                // снятую или выданную роль — применить сразу. Подробно — в самом фильтре.
+                .addFilterAfter(new SessionUserRevalidationFilter(userRepository), SecurityContextHolderFilter.class)
                 .authorizeHttpRequests(requests -> requests
                         // Активация выданной админом учётки: человек ещё не может войти — пароля у него нет.
                         .requestMatchers("/activate", "/activate/done").permitAll()
