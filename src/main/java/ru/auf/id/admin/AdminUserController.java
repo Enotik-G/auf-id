@@ -1,6 +1,6 @@
 package ru.auf.id.admin;
 
-import ru.auf.id.provisioning.ActivationPageController;
+import ru.auf.id.provisioning.ActivationLinks;
 import ru.auf.id.provisioning.EmailAlreadyTakenException;
 import ru.auf.id.provisioning.Invitation;
 import ru.auf.id.provisioning.ProvisioningService;
@@ -18,7 +18,6 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
@@ -35,7 +34,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.util.UriComponentsBuilder;
 
 import java.util.UUID;
 
@@ -53,14 +51,14 @@ public class AdminUserController {
 
     private final ProvisioningService provisioning;
     private final AdminUserService adminUsers;
-    private final String publicUrl;
+    private final ActivationLinks activationLinks;
 
     public AdminUserController(ProvisioningService provisioning,
                                AdminUserService adminUsers,
-                               @Value("${auth.public-url}") String publicUrl) {
+                               ActivationLinks activationLinks) {
         this.provisioning = provisioning;
         this.adminUsers = adminUsers;
-        this.publicUrl = publicUrl;
+        this.activationLinks = activationLinks;
     }
 
     @PostMapping
@@ -174,12 +172,7 @@ public class AdminUserController {
     }
 
     private InvitationResponse toResponse(Invitation invitation) {
-        String link = UriComponentsBuilder.fromUriString(publicUrl)
-                .path(ActivationPageController.ACTIVATE_PATH)
-                .queryParam("token", invitation.activationToken())
-                .build()
-                .toUriString();
-        return new InvitationResponse(invitation.userId(), link);
+        return new InvitationResponse(invitation.userId(), activationLinks.linkFor(invitation.activationToken()));
     }
 
     @ExceptionHandler(UserNotFoundException.class)

@@ -2,6 +2,7 @@ package ru.auf.id.admin;
 
 import ru.auf.id.SecurityConfiguration;
 import ru.auf.id.TestTime;
+import ru.auf.id.provisioning.ActivationLinks;
 import ru.auf.id.provisioning.EmailAlreadyTakenException;
 import ru.auf.id.provisioning.Invitation;
 import ru.auf.id.provisioning.ProvisioningService;
@@ -44,7 +45,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(AdminUserController.class)
-@Import(SecurityConfiguration.class)
+@Import({SecurityConfiguration.class, ActivationLinks.class})
 class AdminUserControllerTest {
 
     /** Нужен фильтру перепроверки сессии, который ставит SecurityConfiguration. */
