@@ -3,8 +3,8 @@ package ru.auf.id.login;
 import ru.auf.id.TestTime;
 import ru.auf.id.TestcontainersConfiguration;
 import ru.auf.id.user.AllowedEmailDomains;
+import ru.auf.id.user.BootstrapAdminEmails;
 import ru.auf.id.user.EmailAddress;
-import ru.auf.id.user.InvalidEmailException;
 import ru.auf.id.user.Role;
 import ru.auf.id.user.User;
 import ru.auf.id.user.UserRepository;
@@ -23,10 +23,9 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @DataJpaTest
-@Import({TestcontainersConfiguration.class, BootstrapAdminGranter.class, AllowedEmailDomains.class})
+@Import({TestcontainersConfiguration.class, BootstrapAdminGranter.class, BootstrapAdminEmails.class, AllowedEmailDomains.class})
 // Нарочно с другим регистром и пробелом: так проверяется нормализация адреса.
 @TestPropertySource(properties = "auth.bootstrap.admin-emails=Director@Sinhub.RU, boss@sinhub.ru")
 class BootstrapAdminGranterTest {
@@ -138,27 +137,9 @@ class BootstrapAdminGranterTest {
     void doesNothingWhenNobodyIsConfigured() {
         UserRepository untouched = Mockito.mock(UserRepository.class);
 
-        new BootstrapAdminGranter(untouched, COLLEGE_DOMAIN, List.of()).onLoginSuccess(loginEventFor(UUID.randomUUID()));
+        new BootstrapAdminGranter(untouched, new BootstrapAdminEmails(COLLEGE_DOMAIN, List.of())).onLoginSuccess(loginEventFor(UUID.randomUUID()));
 
         Mockito.verifyNoInteractions(untouched);
-    }
-
-    /** Кривой адрес в настройке должен уронить приложение при старте, а не молчать. */
-    @Test
-    void refusesToStartWithAMalformedAddress() {
-        UserRepository any = Mockito.mock(UserRepository.class);
-
-        assertThatThrownBy(() -> new BootstrapAdminGranter(any, COLLEGE_DOMAIN, List.of("не-похоже-на-почту")))
-                .isInstanceOf(InvalidEmailException.class);
-    }
-
-    /** Адрес чужого домена никогда не войдёт, а значит, и роль не получит — тоже ошибка при старте. */
-    @Test
-    void refusesToStartWithAnAddressOutsideTheCollegeDomain() {
-        UserRepository any = Mockito.mock(UserRepository.class);
-
-        assertThatThrownBy(() -> new BootstrapAdminGranter(any, COLLEGE_DOMAIN, List.of("director@gmail.com")))
-                .isInstanceOf(InvalidEmailException.class);
     }
 
     private User activeUser(String email) {
