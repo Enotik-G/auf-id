@@ -14,6 +14,7 @@ import ru.auf.id.user.UserNotFoundException;
 import ru.auf.id.user.UserRepository;
 import ru.auf.id.user.UserStatus;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -121,6 +122,15 @@ public class AdminUserService {
                 throw new EmailAlreadyTakenException(newEmail);
             }
             user.changeEmail(newEmail);
+            try {
+                // Сразу в базу: гонку с параллельным запросом ловим здесь, как в ProvisioningService.invite.
+                userRepository.saveAndFlush(user);
+            } catch (DataIntegrityViolationException e) {
+                if (EmailAlreadyTakenException.isCausedBy(e)) {
+                    throw new EmailAlreadyTakenException(newEmail);
+                }
+                throw e;
+            }
         }
         return user;
     }
