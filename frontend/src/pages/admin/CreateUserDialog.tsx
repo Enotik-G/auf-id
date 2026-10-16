@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { CopyableLink } from '@/components/CopyableLink'
+import { CopyableValue } from '@/components/CopyableValue'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -82,7 +82,7 @@ function CreateUserForm({ onCreated }: { onCreated: () => void }) {
             Ссылку для «{fullName}» передайте лично: по ней задаётся пароль. Она одноразовая и действует 7 дней.
           </DialogDescription>
         </DialogHeader>
-        <CopyableLink link={created.activationLink} />
+        <CopyableValue value={created.activationLink} label="Ссылка активации" />
         <Alert>
           <AlertDescription>
             Показать ссылку ещё раз нельзя: сервер хранит только её отпечаток. Потеряется — выдайте новую в

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { CopyableLink } from '@/components/CopyableLink'
+import { CopyableValue } from '@/components/CopyableValue'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import {
   AlertDialog,
@@ -73,7 +73,7 @@ export function LinksCard({ user }: { user: AdminUser }) {
         )}
         {link !== null ? (
           <>
-            <CopyableLink link={link} />
+            <CopyableValue value={link} label={kind.title} />
             <p className="text-sm text-muted-foreground">
               Передайте ссылку лично. Показать её ещё раз нельзя: сервер хранит только отпечаток. Потеряется —
               выдайте новую.
