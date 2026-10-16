@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Navigate, Route, Routes } from 'react-router'
+import { Navigate, Outlet, Route, Routes } from 'react-router'
 import { Layout } from '@/components/Layout'
 import { api } from '@/lib/api'
 import { isAdmin, MeContext } from '@/lib/me'
@@ -7,7 +7,7 @@ import type { Me } from '@/lib/types'
 import { NotFoundPage } from '@/pages/NotFoundPage'
 import { PasswordPage } from '@/pages/account/PasswordPage'
 import { ProfilePage } from '@/pages/account/ProfilePage'
-import { AdminHomePage } from '@/pages/admin/AdminHomePage'
+import { UsersPage } from '@/pages/admin/UsersPage'
 
 /**
  * Корень интерфейса: узнаёт, кто вошёл, и выбирает страницу по адресу.
@@ -40,7 +40,11 @@ export default function App() {
           <Route path="/" element={<Navigate to="/account" replace />} />
           <Route path="/account" element={<ProfilePage />} />
           <Route path="/account/password" element={<PasswordPage />} />
-          <Route path="/admin" element={isAdmin(me) ? <AdminHomePage /> : <NotFoundPage />} />
+          {/* Все страницы /admin/… — внутри одной проверки: <Outlet /> рисует вложенную страницу. */}
+          <Route path="/admin" element={isAdmin(me) ? <Outlet /> : <NotFoundPage />}>
+            <Route index element={<Navigate to="/admin/users" replace />} />
+            <Route path="users" element={<UsersPage />} />
+          </Route>
           <Route path="*" element={<NotFoundPage />} />
         </Route>
       </Routes>

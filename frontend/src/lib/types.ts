@@ -12,3 +12,26 @@ export interface Me {
   createdAt: string
   lastLoginAt: string | null
 }
+
+export type UserStatus = 'INVITED' | 'ACTIVE' | 'BLOCKED' | 'LOCKED' | 'DELETED'
+
+/** Учётка глазами администратора — admin/UserResponse.java */
+export interface AdminUser {
+  id: string
+  email: string
+  fullName: string
+  status: UserStatus
+  roles: Role[]
+  createdAt: string
+  lastLoginAt: string | null
+}
+
+/** GET /api/v1/admin/users — admin/UserPage.java */
+export interface UserPage {
+  items: AdminUser[]
+  /** Номер страницы, с нуля. */
+  page: number
+  size: number
+  /** Сколько всего учёток подходит под фильтр. */
+  total: number
+}
