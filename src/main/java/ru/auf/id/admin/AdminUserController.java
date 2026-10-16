@@ -125,6 +125,19 @@ public class AdminUserController {
         return toResponse(provisioning.reissueInvitation(userId));
     }
 
+    @PostMapping("/{userId}/password-reset-link")
+    @Operation(
+            summary = "Выдать ссылку сброса пароля",
+            description = """
+                    Человек забыл пароль. Ссылка действует сутки и одноразовая; прежние ссылки сброса \
+                    этой учётки перестают работать. Передавайте лично: ссылка открывает работающую учётку.""")
+    @ApiResponse(responseCode = "409", description = "Учётка не активирована или заблокирована", content = @Content)
+    @ApiResponse(responseCode = "404", description = "Учётки нет", content = @Content)
+    public PasswordResetLinkResponse issuePasswordResetLink(@PathVariable UUID userId) {
+        String token = provisioning.issuePasswordReset(userId);
+        return new PasswordResetLinkResponse(userId, oneTimeLinks.passwordResetLinkFor(token));
+    }
+
     @PostMapping("/{userId}/block")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @Operation(

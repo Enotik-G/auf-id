@@ -156,6 +156,36 @@ class AdminUserControllerTest {
                 .andExpect(jsonPath("$.activationLink").value("http://localhost:8080/activate?token=fresh-token"));
     }
 
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void issuesPasswordResetLink() throws Exception {
+        when(provisioning.issuePasswordReset(USER_ID)).thenReturn("reset-token");
+
+        mockMvc.perform(post("/api/v1/admin/users/" + USER_ID + "/password-reset-link").with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.userId").value(USER_ID.toString()))
+                .andExpect(jsonPath("$.passwordResetLink").value("http://localhost:8080/reset-password?token=reset-token"));
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void passwordResetLinkForNotActiveAccountIsConflict() throws Exception {
+        when(provisioning.issuePasswordReset(USER_ID))
+                .thenThrow(new WrongUserStatusException("Ссылку сброса пароля можно выдать только учётке в статусе ACTIVE, сейчас INVITED"));
+
+        mockMvc.perform(post("/api/v1/admin/users/" + USER_ID + "/password-reset-link").with(csrf()))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    @WithMockUser(roles = "STUDENT")
+    void studentCannotIssuePasswordResetLink() throws Exception {
+        mockMvc.perform(post("/api/v1/admin/users/" + USER_ID + "/password-reset-link").with(csrf()))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(provisioning);
+    }
+
     // ─────────────────────────── чтение, блокировка, роли ───────────────────────────
 
     @Test

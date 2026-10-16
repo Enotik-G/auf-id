@@ -89,6 +89,30 @@ public class ProvisioningService {
     }
 
     /**
+     * Выдаёт ссылку сброса пароля — человек забыл пароль. Писем нет, поэтому администратор передаёт
+     * ссылку лично: заодно видит, что получает её именно владелец учётки.
+     *
+     * <p>Прежние ссылки сброса этой учётки гаснут — по той же причине, что и при перевыдаче
+     * приглашения. Живёт ссылка сутки ({@link TokenPurpose#PASSWORD_RESET}).
+     *
+     * @return одноразовый токен; виден только сейчас, в базе — лишь его SHA-256
+     * @throws UserNotFoundException если учётки нет
+     * @throws WrongUserStatusException если учётка не {@code ACTIVE}: не активированной нужна ссылка
+     *                                   активации, заблокированной — сначала разблокировка
+     */
+    @Transactional
+    public String issuePasswordReset(UUID userId) {
+        User user = userRepository.findById(userId).orElseThrow(() -> new UserNotFoundException(userId));
+        if (user.getStatus() != UserStatus.ACTIVE) {
+            throw new WrongUserStatusException(
+                    "Ссылку сброса пароля можно выдать только учётке в статусе ACTIVE, сейчас " + user.getStatus());
+        }
+
+        tokenService.revokeAll(user, TokenPurpose.PASSWORD_RESET);
+        return tokenService.issue(user, TokenPurpose.PASSWORD_RESET);
+    }
+
+    /**
      * Переход по ссылке активации: гасит токен, сохраняет пароль и согласие на обработку ПДн и
      * делает учётку активной — всё в одной транзакции.
      *

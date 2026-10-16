@@ -5,13 +5,16 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.util.UriComponentsBuilder;
 
 /**
- * Собирает ссылку активации из одноразового токена: {@code <публичный адрес>/activate?token=...}.
+ * Собирает одноразовые ссылки из токенов: {@code <публичный адрес>/<страница>?token=...}.
  *
- * <p>Ссылку выдают двое — админка и создание первых администраторов при старте, — поэтому правило
- * сборки живёт в одном месте, а не повторяется у каждого.
+ * <p>Ссылок два вида — активация и сброс пароля, а выдают их несколько мест (админка, создание первых
+ * администраторов при старте). Поэтому правило сборки живёт здесь, а не повторяется у каждого.
  */
 @Component
 public class OneTimeLinks {
+
+    /** Страница, где задают новый пароль по ссылке сброса. */
+    public static final String PASSWORD_RESET_PATH = "/reset-password";
 
     private final String publicUrl;
 
@@ -20,9 +23,17 @@ public class OneTimeLinks {
     }
 
     public String activationLinkFor(String activationToken) {
+        return linkTo(ActivationPageController.ACTIVATE_PATH, activationToken);
+    }
+
+    public String passwordResetLinkFor(String resetToken) {
+        return linkTo(PASSWORD_RESET_PATH, resetToken);
+    }
+
+    private String linkTo(String path, String token) {
         return UriComponentsBuilder.fromUriString(publicUrl)
-                .path(ActivationPageController.ACTIVATE_PATH)
-                .queryParam("token", activationToken)
+                .path(path)
+                .queryParam("token", token)
                 .build()
                 .toUriString();
     }
