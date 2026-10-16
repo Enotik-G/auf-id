@@ -17,9 +17,12 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.sql.Timestamp;
+import java.time.Instant;
 import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -59,6 +62,9 @@ class SessionUserRevalidationTest {
 
     @Autowired
     private StringRedisTemplate redis;
+
+    @Autowired
+    private JdbcTemplate jdbc;
 
     private User admin;
 
@@ -133,6 +139,21 @@ class SessionUserRevalidationTest {
 
         mockMvc.perform(get("/api/v1/admin/users/{id}", admin.getId()).session(session))
                 .andExpect(status().isOk());
+    }
+
+    /**
+     * Пароль сменили после входа — например, его узнал тот, кто вошёл в эту сессию. Она закрывается
+     * на следующем же запросе. Смена — прямой записью времени в БД: проверяется только фильтр.
+     */
+    @Test
+    void sessionOpenedBeforePasswordChangeIsClosed() throws Exception {
+        MockHttpSession session = logIn();
+        jdbc.update("UPDATE password_credentials SET changed_at = ? WHERE user_id = ?",
+                Timestamp.from(Instant.now().plusSeconds(1)), admin.getId());
+
+        mockMvc.perform(get("/").session(session))
+                .andExpect(redirectedUrl("/login"));
+        assertThat(session.isInvalid()).isTrue();
     }
 
     private MockHttpSession logIn() throws Exception {

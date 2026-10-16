@@ -12,6 +12,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.FactorGrantedAuthority;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
@@ -19,6 +20,7 @@ import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -37,6 +39,9 @@ import java.util.UUID;
  * <ul>
  *   <li>пользователя больше нет или он не {@code ACTIVE} — сессия закрывается, и запрос идёт дальше
  *       как от не вошедшего (браузер попадёт на страницу входа, API получит 401);</li>
+ *   <li>пароль сменили <b>после</b> входа в эту сессию — она тоже закрывается. Пароль меняют, когда
+ *       его узнал кто-то другой; войти с ним этот другой мог успеть, и его сессия не должна пережить
+ *       смену пароля;</li>
  *   <li>роли в БД изменились — в сессию кладутся новые, и правило {@code hasRole("ADMIN")} видит их
  *       уже на этом запросе.</li>
  * </ul>
@@ -65,7 +70,7 @@ public class SessionUserRevalidationFilter extends OncePerRequestFilter {
             userIdOf(login).ifPresent(userId -> {
                 Optional<User> user = userRepository.findById(userId)
                         .filter(found -> found.getStatus() == UserStatus.ACTIVE);
-                if (user.isEmpty()) {
+                if (user.isEmpty() || passwordChangedSinceLogin(login, userId)) {
                     endSession(request);
                 } else if (rolesChanged(login, user.get())) {
                     replaceRoles(login, user.get(), request, response);
@@ -87,6 +92,25 @@ public class SessionUserRevalidationFilter extends OncePerRequestFilter {
         } catch (IllegalArgumentException notAUserId) {
             return Optional.empty();
         }
+    }
+
+    /**
+     * Момент входа — из {@link FactorGrantedAuthority} пароля: её ставит настоящий вход формой. Нет её
+     * (сессии тестов контроллеров, см. {@link #userIdOf}) — сравнивать не с чем, сессия не трогается.
+     */
+    private boolean passwordChangedSinceLogin(Authentication login, UUID userId) {
+        Optional<Instant> loggedInAt = login.getAuthorities().stream()
+                .filter(FactorGrantedAuthority.class::isInstance)
+                .map(FactorGrantedAuthority.class::cast)
+                .filter(factor -> FactorGrantedAuthority.PASSWORD_AUTHORITY.equals(factor.getAuthority()))
+                .map(FactorGrantedAuthority::getIssuedAt)
+                .findFirst();
+        if (loggedInAt.isEmpty()) {
+            return false;
+        }
+        return userRepository.findPasswordChangedAt(userId)
+                .map(changedAt -> changedAt.isAfter(loggedInAt.get()))
+                .orElse(false);
     }
 
     /** Как выход, только без перенаправления: остаток запроса обрабатывается как от не вошедшего. */
