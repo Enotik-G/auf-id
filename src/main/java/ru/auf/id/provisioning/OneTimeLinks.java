@@ -11,15 +11,15 @@ import org.springframework.web.util.UriComponentsBuilder;
  * сборки живёт в одном месте, а не повторяется у каждого.
  */
 @Component
-public class ActivationLinks {
+public class OneTimeLinks {
 
     private final String publicUrl;
 
-    public ActivationLinks(@Value("${auth.public-url}") String publicUrl) {
+    public OneTimeLinks(@Value("${auth.public-url}") String publicUrl) {
         this.publicUrl = publicUrl;
     }
 
-    public String linkFor(String activationToken) {
+    public String activationLinkFor(String activationToken) {
         return UriComponentsBuilder.fromUriString(publicUrl)
                 .path(ActivationPageController.ACTIVATE_PATH)
                 .queryParam("token", activationToken)

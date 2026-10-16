@@ -42,7 +42,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @DataJpaTest
 @Import({TestcontainersConfiguration.class, AllowedEmailDomains.class, ClockConfiguration.class,
         ProvisioningService.class, OneTimeTokenService.class, PasswordHasher.class, ConsentService.class,
-        BootstrapAdminEmails.class, ActivationLinks.class, BootstrapAdminInvitations.class})
+        BootstrapAdminEmails.class, OneTimeLinks.class, BootstrapAdminInvitations.class})
 @TestPropertySource(properties = "auth.bootstrap.admin-emails=director@sinhub.ru")
 @ExtendWith(OutputCaptureExtension.class)
 class BootstrapAdminInvitationsTest {

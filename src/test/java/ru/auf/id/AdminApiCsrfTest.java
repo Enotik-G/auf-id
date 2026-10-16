@@ -2,7 +2,7 @@ package ru.auf.id;
 
 import ru.auf.id.admin.AdminUserController;
 import ru.auf.id.admin.AdminUserService;
-import ru.auf.id.provisioning.ActivationLinks;
+import ru.auf.id.provisioning.OneTimeLinks;
 import ru.auf.id.provisioning.ProvisioningService;
 import ru.auf.id.user.EmailAddress;
 import ru.auf.id.user.User;
@@ -38,7 +38,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * больше не ставится. Здесь {@code csrf()} не используется ни разу.
  */
 @WebMvcTest(AdminUserController.class)
-@Import({SecurityConfiguration.class, ActivationLinks.class})
+@Import({SecurityConfiguration.class, OneTimeLinks.class})
 @DirtiesContext(classMode = DirtiesContext.ClassMode.BEFORE_CLASS)
 class AdminApiCsrfTest {
 
