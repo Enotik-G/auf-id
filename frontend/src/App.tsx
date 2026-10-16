@@ -7,6 +7,7 @@ import type { Me } from '@/lib/types'
 import { NotFoundPage } from '@/pages/NotFoundPage'
 import { PasswordPage } from '@/pages/account/PasswordPage'
 import { ProfilePage } from '@/pages/account/ProfilePage'
+import { UserDetailsPage } from '@/pages/admin/UserDetailsPage'
 import { UsersPage } from '@/pages/admin/UsersPage'
 
 /**
@@ -44,6 +45,7 @@ export default function App() {
           <Route path="/admin" element={isAdmin(me) ? <Outlet /> : <NotFoundPage />}>
             <Route index element={<Navigate to="/admin/users" replace />} />
             <Route path="users" element={<UsersPage />} />
+            <Route path="users/:userId" element={<UserDetailsPage />} />
           </Route>
           <Route path="*" element={<NotFoundPage />} />
         </Route>

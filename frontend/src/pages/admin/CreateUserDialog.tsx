@@ -15,10 +15,8 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { api, ApiError } from '@/lib/api'
-import { roleLabel } from '@/lib/format'
+import { roleLabel, ROLES } from '@/lib/format'
 import type { InvitationResponse, Role } from '@/lib/types'
-
-const ROLES: Role[] = ['STUDENT', 'CURATOR', 'ADMIN']
 
 /**
  * Кнопка «Создать учётную запись» и окно с формой. После создания в том же окне — ссылка активации.

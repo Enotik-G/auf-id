@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { useSearchParams } from 'react-router'
+import { Link, useSearchParams } from 'react-router'
 import { StatusBadge } from '@/components/StatusBadge'
 import { CreateUserDialog } from '@/pages/admin/CreateUserDialog'
 import { Badge } from '@/components/ui/badge'
@@ -146,7 +146,11 @@ export function UsersPage() {
             )}
             {users.items.map((user) => (
               <TableRow key={user.id}>
-                <TableCell className="font-medium">{user.fullName}</TableCell>
+                <TableCell className="font-medium">
+                  <Link to={`/admin/users/${user.id}`} className="hover:underline">
+                    {user.fullName}
+                  </Link>
+                </TableCell>
                 <TableCell>{user.email}</TableCell>
                 <TableCell>
                   <StatusBadge status={user.status} />

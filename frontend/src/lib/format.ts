@@ -3,10 +3,13 @@ import type { Role, UserStatus } from './types'
 // Как показывать человеку то, что API отдаёт в «машинном» виде.
 
 const ROLE_LABELS: Record<Role, string> = {
-  ADMIN: 'Администратор',
-  CURATOR: 'Куратор',
   STUDENT: 'Студент',
+  CURATOR: 'Куратор',
+  ADMIN: 'Администратор',
 }
+
+/** Все роли по порядку — для флажков. */
+export const ROLES = Object.keys(ROLE_LABELS) as Role[]
 
 export function roleLabel(role: Role): string {
   return ROLE_LABELS[role]
