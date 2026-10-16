@@ -13,6 +13,7 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
+import { RegisterClientDialog } from '@/pages/admin/RegisterClientDialog'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -71,7 +72,15 @@ export function ClientsPage() {
 
   return (
     <div className="grid gap-4">
-      <h1 className="text-xl font-semibold">Сервисы</h1>
+      <div className="flex items-center justify-between gap-2">
+        <h1 className="text-xl font-semibold">Сервисы</h1>
+        <RegisterClientDialog
+          onRegistered={(credentials) => {
+            setIssued(credentials)
+            setReloads((n) => n + 1)
+          }}
+        />
+      </div>
       <p className="text-sm text-muted-foreground">
         Приложения, которые входят через AUF ID. Новый сервис подключается регистрацией здесь — правки в самом
         AUF ID ему не нужны.
@@ -191,11 +200,17 @@ export function SecretDialog({ credentials, onClose }: { credentials: ClientCred
         {credentials !== null && (
           <>
             <DialogHeader>
-              <DialogTitle>Секрет сервиса {credentials.clientId}</DialogTitle>
-              <DialogDescription>
-                Передайте его разработчикам сервиса защищённым способом — не в общий чат. Показать секрет ещё раз
-                нельзя: сервер хранит только его хеш. Потеряется — выдайте новый.
-              </DialogDescription>
+              <DialogTitle>
+                {credentials.secret !== null
+                  ? `Секрет сервиса ${credentials.clientId}`
+                  : `Сервис ${credentials.clientId} зарегистрирован`}
+              </DialogTitle>
+              {credentials.secret !== null && (
+                <DialogDescription>
+                  Передайте его разработчикам сервиса защищённым способом — не в общий чат. Показать секрет ещё раз
+                  нельзя: сервер хранит только его хеш. Потеряется — выдайте новый.
+                </DialogDescription>
+              )}
             </DialogHeader>
             {credentials.secret !== null ? (
               <CopyableValue value={credentials.secret} label="Секрет" />
