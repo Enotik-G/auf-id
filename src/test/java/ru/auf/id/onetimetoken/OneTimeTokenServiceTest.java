@@ -87,6 +87,37 @@ class OneTimeTokenServiceTest {
                 .isInstanceOf(InvalidOneTimeTokenException.class);
     }
 
+    /**
+     * Ссылка сброса пароля живёт сутки, а не неделю, как приглашение. Заодно проверяет миграцию 011:
+     * без неё ограничение в БД не дало бы сохранить токен PASSWORD_RESET.
+     */
+    @Test
+    void passwordResetTokenWorksWithinADay() {
+        String rawToken = serviceAt(ISSUED_AT).issue(user, TokenPurpose.PASSWORD_RESET);
+
+        User owner = serviceAt(ISSUED_AT.plus(Duration.ofHours(23))).consume(rawToken, TokenPurpose.PASSWORD_RESET);
+
+        assertThat(owner.getId()).isEqualTo(user.getId());
+    }
+
+    @Test
+    void passwordResetTokenExpiresAfterADay() {
+        String rawToken = serviceAt(ISSUED_AT).issue(user, TokenPurpose.PASSWORD_RESET);
+        OneTimeTokenService nextDay = serviceAt(ISSUED_AT.plus(Duration.ofHours(24)).plusSeconds(60));
+
+        assertThatThrownBy(() -> nextDay.consume(rawToken, TokenPurpose.PASSWORD_RESET))
+                .isInstanceOf(InvalidOneTimeTokenException.class);
+    }
+
+    /** Ссылку сброса нельзя выдать за приглашение: назначение — часть проверки. */
+    @Test
+    void passwordResetTokenIsNotAnInvitation() {
+        String rawToken = serviceAt(ISSUED_AT).issue(user, TokenPurpose.PASSWORD_RESET);
+
+        assertThatThrownBy(() -> serviceAt(ISSUED_AT).consume(rawToken, TokenPurpose.INVITE))
+                .isInstanceOf(InvalidOneTimeTokenException.class);
+    }
+
     @Test
     void unknownTokenIsRejected() {
         assertThatThrownBy(() -> serviceAt(ISSUED_AT).consume("made-up-token", TokenPurpose.INVITE))

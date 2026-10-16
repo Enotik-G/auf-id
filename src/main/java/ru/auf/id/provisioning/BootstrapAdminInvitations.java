@@ -46,7 +46,7 @@ public class BootstrapAdminInvitations {
     private final BootstrapAdminEmails bootstrapAdmins;
     private final UserRepository userRepository;
     private final ProvisioningService provisioning;
-    private final ActivationLinks activationLinks;
+    private final OneTimeLinks oneTimeLinks;
 
     /**
      * {@link ApplicationReadyEvent} — приложение полностью запущено: миграции применены, база
@@ -63,7 +63,7 @@ public class BootstrapAdminInvitations {
             inviteOrReissue(email).ifPresent(invitation -> log.warn(
                     "Администратора в системе нет. Чтобы задать пароль для {}, откройте ссылку "
                             + "(одноразовая, держите в секрете): {}",
-                    email, activationLinks.linkFor(invitation.activationToken())));
+                    email, oneTimeLinks.activationLinkFor(invitation.activationToken())));
         }
     }
 

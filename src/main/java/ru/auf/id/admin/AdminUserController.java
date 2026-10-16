@@ -1,8 +1,8 @@
 package ru.auf.id.admin;
 
-import ru.auf.id.provisioning.ActivationLinks;
 import ru.auf.id.provisioning.EmailAlreadyTakenException;
 import ru.auf.id.provisioning.Invitation;
+import ru.auf.id.provisioning.OneTimeLinks;
 import ru.auf.id.provisioning.ProvisioningService;
 import ru.auf.id.user.EmailAddress;
 import ru.auf.id.user.InvalidEmailException;
@@ -51,14 +51,14 @@ public class AdminUserController {
 
     private final ProvisioningService provisioning;
     private final AdminUserService adminUsers;
-    private final ActivationLinks activationLinks;
+    private final OneTimeLinks oneTimeLinks;
 
     public AdminUserController(ProvisioningService provisioning,
                                AdminUserService adminUsers,
-                               ActivationLinks activationLinks) {
+                               OneTimeLinks oneTimeLinks) {
         this.provisioning = provisioning;
         this.adminUsers = adminUsers;
-        this.activationLinks = activationLinks;
+        this.oneTimeLinks = oneTimeLinks;
     }
 
     @PostMapping
@@ -125,6 +125,19 @@ public class AdminUserController {
         return toResponse(provisioning.reissueInvitation(userId));
     }
 
+    @PostMapping("/{userId}/password-reset-link")
+    @Operation(
+            summary = "Выдать ссылку сброса пароля",
+            description = """
+                    Человек забыл пароль. Ссылка действует сутки и одноразовая; прежние ссылки сброса \
+                    этой учётки перестают работать. Передавайте лично: ссылка открывает работающую учётку.""")
+    @ApiResponse(responseCode = "409", description = "Учётка не активирована или заблокирована", content = @Content)
+    @ApiResponse(responseCode = "404", description = "Учётки нет", content = @Content)
+    public PasswordResetLinkResponse issuePasswordResetLink(@PathVariable UUID userId) {
+        String token = provisioning.issuePasswordReset(userId);
+        return new PasswordResetLinkResponse(userId, oneTimeLinks.passwordResetLinkFor(token));
+    }
+
     @PostMapping("/{userId}/block")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @Operation(
@@ -172,7 +185,7 @@ public class AdminUserController {
     }
 
     private InvitationResponse toResponse(Invitation invitation) {
-        return new InvitationResponse(invitation.userId(), activationLinks.linkFor(invitation.activationToken()));
+        return new InvitationResponse(invitation.userId(), oneTimeLinks.activationLinkFor(invitation.activationToken()));
     }
 
     @ExceptionHandler(UserNotFoundException.class)

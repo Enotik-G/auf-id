@@ -4,6 +4,7 @@ import ru.auf.id.ClockConfiguration;
 import ru.auf.id.TestTime;
 import ru.auf.id.TestcontainersConfiguration;
 import ru.auf.id.authserver.UserAuthorizationRevoker;
+import ru.auf.id.onetimetoken.OneTimeTokenService;
 import ru.auf.id.provisioning.PasswordPolicy;
 import ru.auf.id.user.EmailAddress;
 import ru.auf.id.user.PasswordCredential;
@@ -27,7 +28,7 @@ import static org.mockito.Mockito.verify;
 
 @DataJpaTest
 @Import({TestcontainersConfiguration.class, ClockConfiguration.class,
-        PasswordService.class, PasswordPolicy.class, PasswordHasher.class})
+        PasswordService.class, PasswordPolicy.class, PasswordHasher.class, OneTimeTokenService.class})
 class PasswordServiceTest {
 
     private static final String OLD_PASSWORD = "старый-пароль-студента";

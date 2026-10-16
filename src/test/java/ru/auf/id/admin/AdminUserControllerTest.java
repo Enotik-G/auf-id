@@ -2,9 +2,9 @@ package ru.auf.id.admin;
 
 import ru.auf.id.SecurityConfiguration;
 import ru.auf.id.TestTime;
-import ru.auf.id.provisioning.ActivationLinks;
 import ru.auf.id.provisioning.EmailAlreadyTakenException;
 import ru.auf.id.provisioning.Invitation;
+import ru.auf.id.provisioning.OneTimeLinks;
 import ru.auf.id.provisioning.ProvisioningService;
 import ru.auf.id.user.EmailAddress;
 import ru.auf.id.user.Role;
@@ -45,7 +45,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(AdminUserController.class)
-@Import({SecurityConfiguration.class, ActivationLinks.class})
+@Import({SecurityConfiguration.class, OneTimeLinks.class})
 class AdminUserControllerTest {
 
     /** Нужен фильтру перепроверки сессии, который ставит SecurityConfiguration. */
@@ -154,6 +154,36 @@ class AdminUserControllerTest {
         mockMvc.perform(post("/api/v1/admin/users/" + USER_ID + "/activation-link").with(csrf()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.activationLink").value("http://localhost:8080/activate?token=fresh-token"));
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void issuesPasswordResetLink() throws Exception {
+        when(provisioning.issuePasswordReset(USER_ID)).thenReturn("reset-token");
+
+        mockMvc.perform(post("/api/v1/admin/users/" + USER_ID + "/password-reset-link").with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.userId").value(USER_ID.toString()))
+                .andExpect(jsonPath("$.passwordResetLink").value("http://localhost:8080/reset-password?token=reset-token"));
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void passwordResetLinkForNotActiveAccountIsConflict() throws Exception {
+        when(provisioning.issuePasswordReset(USER_ID))
+                .thenThrow(new WrongUserStatusException("Ссылку сброса пароля можно выдать только учётке в статусе ACTIVE, сейчас INVITED"));
+
+        mockMvc.perform(post("/api/v1/admin/users/" + USER_ID + "/password-reset-link").with(csrf()))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    @WithMockUser(roles = "STUDENT")
+    void studentCannotIssuePasswordResetLink() throws Exception {
+        mockMvc.perform(post("/api/v1/admin/users/" + USER_ID + "/password-reset-link").with(csrf()))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(provisioning);
     }
 
     // ─────────────────────────── чтение, блокировка, роли ───────────────────────────

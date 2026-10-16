@@ -1,10 +1,15 @@
 package ru.auf.id.account;
 
 import ru.auf.id.authserver.UserAuthorizationRevoker;
+import ru.auf.id.onetimetoken.InvalidOneTimeTokenException;
+import ru.auf.id.onetimetoken.OneTimeTokenService;
+import ru.auf.id.onetimetoken.TokenPurpose;
 import ru.auf.id.provisioning.PasswordPolicy;
 import ru.auf.id.user.PasswordCredential;
 import ru.auf.id.user.PasswordCredentialRepository;
 import ru.auf.id.user.PasswordHasher;
+import ru.auf.id.user.User;
+import ru.auf.id.user.UserStatus;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -36,6 +41,7 @@ public class PasswordService {
     private final UserAuthorizationRevoker authorizationRevoker;
     private final Clock clock;
     private final PasswordChangeAttempts changeAttempts;
+    private final OneTimeTokenService tokenService;
 
     /**
      * Правила пароля проверяются здесь, а не у вызывающего: тогда ни смена, ни сброс не смогут их
@@ -74,6 +80,28 @@ public class PasswordService {
         }
         replace(credential, newRawPassword);
         changeAttempts.reset(userId);
+    }
+
+    /**
+     * Сброс забытого пароля по ссылке от администратора — всё в одной транзакции.
+     *
+     * <p>Порядок важен: токен гасится первым, но если новый пароль не прошёл правила, исключение
+     * откатит транзакцию вместе с погашением — ссылка останется рабочей, и человек попробует снова.
+     *
+     * <p>Учётку могли заблокировать уже после выдачи ссылки — тогда ссылка недействительна. Причину
+     * наружу не различаем: перешедшему по ссылке это одинаковое «ссылка недействительна».
+     *
+     * @throws InvalidOneTimeTokenException если ссылка недействительна, использована, устарела
+     *                                      или учётка уже не {@code ACTIVE}
+     * @throws WeakPasswordException если новый пароль не проходит {@link PasswordPolicy}
+     */
+    @Transactional
+    public void resetPassword(String rawToken, String newRawPassword) {
+        User user = tokenService.consume(rawToken, TokenPurpose.PASSWORD_RESET);
+        if (user.getStatus() != UserStatus.ACTIVE) {
+            throw new InvalidOneTimeTokenException();
+        }
+        replace(credentialOf(user.getId()), newRawPassword);
     }
 
     private PasswordCredential credentialOf(UUID userId) {

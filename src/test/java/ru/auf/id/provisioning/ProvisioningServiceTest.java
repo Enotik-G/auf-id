@@ -19,6 +19,7 @@ import ru.auf.id.user.User;
 import ru.auf.id.user.UserRepository;
 import ru.auf.id.user.UserNotFoundException;
 import ru.auf.id.user.UserStatus;
+import ru.auf.id.user.WrongUserStatusException;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
@@ -281,5 +282,61 @@ class ProvisioningServiceTest {
         assertThatThrownBy(() -> provisioning.reissueInvitation(invitation.userId()))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("ACTIVE");
+    }
+
+    // ─────────────────────────── сброс пароля ───────────────────────────
+
+    @Test
+    void passwordResetTokenWorksForActiveAccount() {
+        UUID userId = activeStudent();
+
+        String resetToken = provisioning.issuePasswordReset(userId);
+
+        assertThat(tokenService.consume(resetToken, TokenPurpose.PASSWORD_RESET).getId()).isEqualTo(userId);
+    }
+
+    /** Новая ссылка гасит прежнюю: просят новую часто потому, что старая ушла не туда. */
+    @Test
+    void newPasswordResetLinkRevokesThePreviousOne() {
+        UUID userId = activeStudent();
+        String first = provisioning.issuePasswordReset(userId);
+
+        provisioning.issuePasswordReset(userId);
+
+        assertThatThrownBy(() -> tokenService.consume(first, TokenPurpose.PASSWORD_RESET))
+                .isInstanceOf(InvalidOneTimeTokenException.class);
+    }
+
+    /** Не активированной учётке нужна ссылка активации, а не сброса. */
+    @Test
+    void refusesPasswordResetForAccountAwaitingActivation() {
+        Invitation invitation = provisioning.invite(EMAIL, "Иван Иванов", Set.of());
+
+        assertThatThrownBy(() -> provisioning.issuePasswordReset(invitation.userId()))
+                .isInstanceOf(WrongUserStatusException.class)
+                .hasMessageContaining("INVITED");
+    }
+
+    /** Иначе ссылка сброса стала бы обходом блокировки. */
+    @Test
+    void refusesPasswordResetForBlockedAccount() {
+        UUID userId = activeStudent();
+        userRepository.findById(userId).orElseThrow().block();
+
+        assertThatThrownBy(() -> provisioning.issuePasswordReset(userId))
+                .isInstanceOf(WrongUserStatusException.class)
+                .hasMessageContaining("BLOCKED");
+    }
+
+    @Test
+    void refusesPasswordResetForUnknownUser() {
+        assertThatThrownBy(() -> provisioning.issuePasswordReset(UUID.randomUUID()))
+                .isInstanceOf(UserNotFoundException.class);
+    }
+
+    private UUID activeStudent() {
+        Invitation invitation = provisioning.invite(EMAIL, "Иван Иванов", Set.of());
+        provisioning.activate(invitation.activationToken(), "correct horse battery staple", CLIENT_IP);
+        return invitation.userId();
     }
 }
