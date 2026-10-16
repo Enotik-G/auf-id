@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useParams } from 'react-router'
 import { StatusBadge } from '@/components/StatusBadge'
+import { LinksCard } from '@/pages/admin/LinksCard'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import {
   AlertDialog,
@@ -66,6 +67,9 @@ export function UserDetailsPage() {
           <h1 className="text-xl font-semibold">{user.fullName}</h1>
           <DetailsCard user={user} onSaved={setUser} />
           <AccessCard user={user} onChanged={reload} />
+          {/* key по статусу: учётку заблокировали или активировали — показанная ссылка уже не годится,
+              и React создаёт карточку заново, без неё. */}
+          <LinksCard key={user.status} user={user} />
           <RolesCard user={user} onChanged={reload} />
         </>
       )}

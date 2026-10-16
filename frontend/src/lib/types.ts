@@ -42,3 +42,9 @@ export interface InvitationResponse {
   /** Одноразовая ссылка: показать её можно только сейчас, сервер хранит лишь хеш. */
   activationLink: string
 }
+
+/** POST /api/v1/admin/users/{id}/password-reset-link — admin/PasswordResetLinkResponse.java */
+export interface PasswordResetLinkResponse {
+  userId: string
+  passwordResetLink: string
+}
