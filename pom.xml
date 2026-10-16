@@ -20,6 +20,8 @@
         <!-- Node, которым Maven собирает веб-интерфейс (frontend/). Свой, скачанный плагином:
              установленный на машине не нужен и не влияет на сборку. -->
         <node.version>v22.22.1</node.version>
+        <!-- Умолчание для -DskipTests: его читает и запуск тестов интерфейса (frontend-maven-plugin). -->
+        <skipTests>false</skipTests>
     </properties>
     <dependencies>
         <dependency>
@@ -206,6 +208,19 @@
                         </goals>
                         <configuration>
                             <arguments>ci --no-audit --no-fund</arguments>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <!-- Тесты интерфейса (Vitest) — вместе с тестами Java, в той же фазе. -->
+                        <id>npm-test</id>
+                        <phase>test</phase>
+                        <goals>
+                            <goal>npm</goal>
+                        </goals>
+                        <configuration>
+                            <arguments>test</arguments>
+                            <!-- -DskipTests пропускает и их, как тесты Java. -->
+                            <skip>${skipTests}</skip>
                         </configuration>
                     </execution>
                     <execution>

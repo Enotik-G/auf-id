@@ -19,6 +19,13 @@ export default defineConfig({
     // на сервере, где интерфейс и API отдаёт одно приложение.
     proxy: {
       '/api': 'http://localhost:8080',
+      // Вход и всё, что нужно его странице: при разработке на него ведёт клиент API, когда сессия
+      // кончилась (src/lib/api.ts), — а страница входа живёт в AUF ID.
+      '/login': 'http://localhost:8080',
+      '/logout': 'http://localhost:8080',
+      '/css': 'http://localhost:8080',
+      '/js': 'http://localhost:8080',
+      '/captcha': 'http://localhost:8080',
     },
   },
 })
