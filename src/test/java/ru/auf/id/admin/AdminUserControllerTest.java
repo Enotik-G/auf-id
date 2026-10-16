@@ -251,6 +251,16 @@ class AdminUserControllerTest {
         verifyNoInteractions(adminUsers);
     }
 
+    /** Без границы такой номер давал 500: сдвиг page × size не помещается в int. */
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void refusesPageNumberBeyondTheLimit() throws Exception {
+        mockMvc.perform(get("/api/v1/admin/users").param("page", "100001"))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(adminUsers);
+    }
+
     @Test
     @WithMockUser(roles = "ADMIN")
     void updatesNameAndEmail() throws Exception {

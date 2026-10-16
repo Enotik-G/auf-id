@@ -16,6 +16,7 @@ import ru.auf.id.user.UserNotFoundException;
 import ru.auf.id.user.UserStatus;
 import ru.auf.id.user.WrongUserStatusException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -60,7 +61,16 @@ public class ProvisioningService {
 
         User user = User.invited(email, fullName, Instant.now(clock));
         roles.forEach(user::grantRole);
-        userRepository.save(user);
+        try {
+            // Сразу в базу, а не в конце транзакции: если параллельный запрос успел занять адрес после
+            // проверки выше, ошибка базы возникнет здесь, где её можно превратить в понятный ответ.
+            userRepository.saveAndFlush(user);
+        } catch (DataIntegrityViolationException e) {
+            if (EmailAlreadyTakenException.isCausedBy(e)) {
+                throw new EmailAlreadyTakenException(email);
+            }
+            throw e;
+        }
 
         // Токен виден целиком только в этот момент: в базе остаётся лишь его SHA-256.
         return new Invitation(user.getId(), tokenService.issue(user, TokenPurpose.INVITE));
