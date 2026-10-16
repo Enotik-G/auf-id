@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { useSearchParams } from 'react-router'
 import { StatusBadge } from '@/components/StatusBadge'
+import { CreateUserDialog } from '@/pages/admin/CreateUserDialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -54,6 +55,8 @@ export function UsersPage() {
   const page = Math.max(1, Number(searchParams.get('page')) || 1)
 
   const [users, setUsers] = useState<UserPage | null>(null)
+  // Увеличиваем, чтобы загрузить список заново при тех же условиях (например, после создания учётки).
+  const [reloads, setReloads] = useState(0)
   // Ошибка помнит, к какому запросу относится: сменились условия — старая ошибка больше не показывается.
   const [error, setError] = useState<{ request: string; message: string } | null>(null)
 
@@ -73,7 +76,7 @@ export function UsersPage() {
     return () => {
       stale = true
     }
-  }, [request])
+  }, [request, reloads])
 
   /** Поменять условия в адресе. Новые условия — снова с первой страницы. */
   function applyFilter(next: { q?: string; status?: string }) {
@@ -95,7 +98,10 @@ export function UsersPage() {
 
   return (
     <div className="grid gap-4">
-      <h1 className="text-xl font-semibold">Учётные записи</h1>
+      <div className="flex items-center justify-between gap-2">
+        <h1 className="text-xl font-semibold">Учётные записи</h1>
+        <CreateUserDialog onCreated={() => setReloads((n) => n + 1)} />
+      </div>
 
       <div className="flex flex-wrap items-center gap-2">
         {/* key: адрес сменился не из поля (кнопка «Назад» в браузере) — React создаёт поле заново,

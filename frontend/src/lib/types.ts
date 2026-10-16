@@ -35,3 +35,10 @@ export interface UserPage {
   /** Сколько всего учёток подходит под фильтр. */
   total: number
 }
+
+/** POST /api/v1/admin/users — admin/InvitationResponse.java */
+export interface InvitationResponse {
+  userId: string
+  /** Одноразовая ссылка: показать её можно только сейчас, сервер хранит лишь хеш. */
+  activationLink: string
+}
