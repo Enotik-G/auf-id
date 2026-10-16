@@ -1,0 +1,99 @@
+# AUF ID на сервере: приложение, Postgres, Redis и Caddy (HTTPS) — одной командой.
+#
+#   cd deploy && docker compose up -d
+#
+# Настройки и секреты — в deploy/.env (шаблон — .env.example). Исходники на сервере не нужны:
+# образ берётся готовым из GHCR. Подробно — README, раздел «Деплой».
+name: auf-id
+
+services:
+  auf-id:
+    # Тег — из .env: на сервере лучше конкретный sha-…, а не latest — так известно, что запущено,
+    # и можно откатиться на прошлый.
+    image: ghcr.io/enotik-g/auf-id:${AUF_ID_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    env_file: .env
+    # То, что ниже, сильнее .env: опечатка в нём эти настройки не перебьёт.
+    environment:
+      AUTH_PUBLIC_URL: https://${AUF_ID_DOMAIN:?AUF_ID_DOMAIN не задан в .env}
+      DB_HOST: postgres
+      REDIS_HOST: redis
+      # Адрес клиента — из X-Forwarded-For, но только от Caddy (его адрес закреплён ниже).
+      FORWARD_HEADERS_STRATEGY: native
+      TRUSTED_PROXIES: 172.30.0.10/32
+      # Cookie — только по HTTPS; CSRF-cookie с __Host-, чтобы её не подбросил соседний поддомен.
+      SESSION_COOKIE_SECURE: "true"
+      AUTH_CSRF_COOKIE_NAME: __Host-XSRF-TOKEN
+      # Клиенты для разработки (launcher-dev, planner-dev) на сервере не нужны.
+      AUTH_DEV_CLIENT_ENABLED: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - internal
+    # Портов наружу нет: снаружи AUF ID доступен только через Caddy.
+
+  postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:?DB_NAME не задан в .env}
+      POSTGRES_USER: ${DB_USER:?DB_USER не задан в .env}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD не задан в .env}
+    volumes:
+      # Postgres 18 — том в /var/lib/postgresql, не в …/data (см. CLAUDE.md, подводные камни).
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      retries: 12
+    networks:
+      - internal
+
+  redis:
+    image: redis:8.8-alpine
+    restart: unless-stopped
+    # С сохранением на диск: в Redis не только временные счётчики, но и реестр погашенных
+    # refresh-токенов на 30 дней. Потеряем его — кражу старого токена не распознаем.
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 12
+    networks:
+      - internal
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"      # нужен Let's Encrypt для проверки домена и для перенаправления на HTTPS
+      - "443:443"
+      - "443:443/udp" # HTTP/3
+    environment:
+      AUF_ID_DOMAIN: ${AUF_ID_DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Сертификаты и ключи Caddy — на томе: иначе при каждом перезапуске он запрашивал бы новые
+      # и быстро упёрся бы в лимиты Let's Encrypt.
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      internal:
+        ipv4_address: 172.30.0.10
+
+networks:
+  internal:
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
+
+volumes:
+  postgres-data:
+  redis-data:
+  caddy-data:
+  caddy-config:
