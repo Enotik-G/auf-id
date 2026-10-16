@@ -45,14 +45,38 @@ public class PasswordService {
      */
     @Transactional
     public void replacePassword(UUID userId, String newRawPassword) {
+        replace(credentialOf(userId), newRawPassword);
+    }
+
+    /**
+     * Смена пароля самим человеком: сначала — текущий пароль.
+     *
+     * <p>Вошедшему этого мало: сессию могли оставить открытой в компьютерном классе, и без
+     * текущего пароля любой подошедший сменил бы его и забрал учётку себе.
+     *
+     * @throws WrongCurrentPasswordException если текущий пароль неверен
+     * @throws WeakPasswordException если новый пароль не проходит {@link PasswordPolicy}
+     */
+    @Transactional
+    public void changePassword(UUID userId, String currentRawPassword, String newRawPassword) {
+        PasswordCredential credential = credentialOf(userId);
+        if (!passwordHasher.matches(currentRawPassword, credential.getPasswordHash())) {
+            throw new WrongCurrentPasswordException();
+        }
+        replace(credential, newRawPassword);
+    }
+
+    private PasswordCredential credentialOf(UUID userId) {
+        return credentialRepository.findById(userId)
+                .orElseThrow(() -> new IllegalStateException("У учётки " + userId + " нет пароля"));
+    }
+
+    private void replace(PasswordCredential credential, String newRawPassword) {
         PasswordPolicy.Verdict verdict = passwordPolicy.check(newRawPassword);
         if (verdict != PasswordPolicy.Verdict.OK) {
             throw new WeakPasswordException(verdict);
         }
-        PasswordCredential credential = credentialRepository.findById(userId)
-                .orElseThrow(() -> new IllegalStateException("У учётки " + userId + " нет пароля"));
-
         credential.replace(passwordHasher.hash(newRawPassword), Instant.now(clock));
-        authorizationRevoker.revokeAll(userId);
+        authorizationRevoker.revokeAll(credential.getUserId());
     }
 }

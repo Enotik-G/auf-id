@@ -1,5 +1,6 @@
 package ru.auf.id.account;
 
+import ru.auf.id.ClockConfiguration;
 import ru.auf.id.SecurityConfiguration;
 import ru.auf.id.TestTime;
 import ru.auf.id.user.EmailAddress;
@@ -23,7 +24,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(MeController.class)
-@Import(SecurityConfiguration.class)
+@Import({SecurityConfiguration.class, ClockConfiguration.class})
 class MeControllerTest {
 
     private static final UUID USER_ID = UUID.fromString("0199bc42-8f31-7a1e-9c55-2b7d4e6a1f90");
@@ -34,6 +35,10 @@ class MeControllerTest {
     /** Нужен и контроллеру, и фильтру перепроверки сессии, который ставит SecurityConfiguration. */
     @MockitoBean
     private UserRepository userRepository;
+
+    /** Смену пароля целиком проверяет PasswordChangeTest; здесь — только профиль и доступ. */
+    @MockitoBean
+    private PasswordService passwordService;
 
     @Test
     void anonymousGetsUnauthorizedInsteadOfRedirectToLoginPage() throws Exception {
