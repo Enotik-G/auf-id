@@ -47,4 +47,14 @@ public class PasswordCredential {
         credential.changedAt = changedAt;
         return credential;
     }
+
+    /**
+     * Новый пароль вместо прежнего. Время смены важно не только для истории: по нему
+     * {@code SessionUserRevalidationFilter} закрывает сессии, открытые до смены.
+     */
+    public void replace(String newPasswordHash, Instant changedAt) {
+        this.passwordHash = newPasswordHash;
+        this.mustChange = false;
+        this.changedAt = changedAt;
+    }
 }
