@@ -2,6 +2,7 @@ package ru.auf.id;
 
 import ru.auf.id.login.SessionUserRevalidationFilter;
 import ru.auf.id.user.UserRepository;
+import ru.auf.id.webui.WebInterfaceController;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Value;
@@ -53,13 +54,17 @@ public class SecurityConfiguration {
                         // Страница входа — со всеми вариантами адреса (?error, ?blocked, ?logout):
                         // permitAll() у formLogin открывает только адрес /login без параметров.
                         .requestMatchers("/login").permitAll()
-                        // Стили и скрипты страниц (виджет капчи).
-                        .requestMatchers("/css/**", "/js/**").permitAll()
+                        // Стили и скрипты страниц (виджет капчи) и файлы веб-интерфейса (Vite кладёт их
+                        // в /assets/). Это код интерфейса, данных в нём нет.
+                        .requestMatchers("/css/**", "/js/**", "/assets/**").permitAll()
                         // Задачка капчи — её запрашивает страница входа, то есть ещё не вошедший человек.
                         .requestMatchers(HttpMethod.GET, "/captcha/challenge").permitAll()
                         // Админка: только для роли ADMIN. Правило стоит до anyRequest(),
                         // иначе достаточно было бы просто войти.
                         .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
+                        // Страницы панели администратора — тоже только ADMIN. Кабинет (/account/**)
+                        // отдельного правила не требует: его закрывает anyRequest() ниже.
+                        .requestMatchers(WebInterfaceController.ADMIN_PAGES).hasRole("ADMIN")
                         // Документация API.
                         .requestMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
                         // Страница ошибок Spring: без этого любая ошибка превращалась бы в 401.

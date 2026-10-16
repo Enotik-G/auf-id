@@ -1,28 +1,20 @@
 package ru.auf.id.login;
 
-import ru.auf.id.user.User;
-import ru.auf.id.user.UserRepository;
-import lombok.RequiredArgsConstructor;
-import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Controller;
-import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 
-import java.util.UUID;
-
-/** Страница «Вы вошли» — сюда попадают после входа, если не шли в какой-то конкретный сервис. */
+/**
+ * Главная страница AUF ID — сюда попадают после входа, если не шли в какой-то конкретный сервис.
+ *
+ * <p>Своей страницы у неё нет: человека сразу ведём в кабинет веб-интерфейса ({@code /account}).
+ * Там то же, что было на прежней странице «Вы вошли» (имя, выход), и меню — профиль, пароль,
+ * а администратору ещё и панель управления.
+ */
 @Controller
-@RequiredArgsConstructor
 public class HomePageController {
 
-    private final UserRepository userRepository;
-
     @GetMapping("/")
-    public String home(Authentication authentication, Model model) {
-        // Имя вошедшего — его id (см. AccountUserDetailsService).
-        UUID userId = UUID.fromString(authentication.getName());
-        User user = userRepository.findById(userId).orElseThrow();
-        model.addAttribute("user", user);
-        return "home";
+    public String home() {
+        return "redirect:/account";
     }
 }

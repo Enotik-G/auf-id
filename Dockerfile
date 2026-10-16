@@ -8,11 +8,13 @@ WORKDIR /workspace
 COPY mvnw pom.xml ./
 COPY .mvn .mvn
 COPY src/main src/main
+COPY frontend frontend
 
 # Тесты не запускаем: их уже прогнал CI, а в образ они не копируются (.dockerignore).
-# Кеш ~/.m2 переживает пересборки образа, но в сам образ не попадает: после правки кода
-# зависимости не скачиваются заново.
+# Кеши переживают пересборки образа, но в сам образ не попадают: после правки кода ничего не
+# скачивается заново. ~/.m2 — зависимости Java и архив Node, ~/.npm — пакеты веб-интерфейса.
 RUN --mount=type=cache,target=/root/.m2 \
+    --mount=type=cache,target=/root/.npm \
     ./mvnw --batch-mode --no-transfer-progress package -DskipTests
 
 # ---- Этап 2: запуск ----

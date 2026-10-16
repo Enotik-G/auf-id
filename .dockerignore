@@ -9,3 +9,9 @@
 !mvnw
 !.mvn/
 !src/main/
+!frontend/
+
+# Из frontend/ — только исходники: пакеты npm ставит заново внутри сборки (npm ci по
+# package-lock.json), а dist — результат прошлой сборки на чужой машине.
+frontend/node_modules/
+frontend/dist/

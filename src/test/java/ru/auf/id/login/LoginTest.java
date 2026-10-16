@@ -250,13 +250,11 @@ class LoginTest {
     }
 
     @Test
-    void homePageGreetsLoggedInUser() throws Exception {
+    void homePageSendsLoggedInUserToAccount() throws Exception {
         User user = saveUser("ivan@sinhub.ru", true);
 
         mockMvc.perform(get("/").with(user(user.getId().toString())))
-                .andExpect(status().isOk())
-                .andExpect(content().string(containsString("Здравствуйте, Иван Петров!")))
-                .andExpect(content().string(containsString("ivan@sinhub.ru")));
+                .andExpect(redirectedUrl("/account"));
     }
 
     @Test
