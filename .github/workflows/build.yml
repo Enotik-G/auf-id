@@ -18,3 +18,40 @@ jobs:
       # Testcontainers сам поднимает Postgres и Redis — Docker на ubuntu-latest уже есть
       - name: Сборка и тесты
         run: ./mvnw -B verify
+
+  # Docker-образ. На pull request только собирается — так сломанный Dockerfile видно до мержа.
+  # После мержа в master ещё и публикуется в GHCR: ghcr.io/enotik-g/auf-id.
+  image:
+    needs: build                       # только если тесты прошли
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write                  # право публиковать в GHCR — только этому заданию
+    env:
+      PUBLISH: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v4
+      - name: Вход в GHCR
+        if: env.PUBLISH == 'true'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Теги образа
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/enotik-g/auf-id
+          # latest — последний master; sha-1a2b3c4 — неизменная метка конкретного коммита
+          tags: |
+            type=raw,value=latest
+            type=sha
+      - name: Сборка и публикация
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: ${{ env.PUBLISH == 'true' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
