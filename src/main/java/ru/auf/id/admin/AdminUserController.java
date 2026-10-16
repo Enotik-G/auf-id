@@ -49,6 +49,13 @@ public class AdminUserController {
     /** Больше за раз не отдаём: страница на тысячи строк — лишняя нагрузка, а листать её некому. */
     private static final int MAX_PAGE_SIZE = 100;
 
+    /**
+     * Дальше листать незачем — столько учёток в колледже не будет. А без границы огромный номер давал
+     * 500: Spring Data считает сдвиг как {@code page × size} и не пускает его за {@code Integer.MAX_VALUE}.
+     * С этой границей сдвиг не больше 10 млн строк.
+     */
+    private static final int MAX_PAGE = 100_000;
+
     private final ProvisioningService provisioning;
     private final AdminUserService adminUsers;
     private final OneTimeLinks oneTimeLinks;
@@ -86,10 +93,10 @@ public class AdminUserController {
             description = """
                     По алфавиту почт, страницами. `query` ищет подстроку в ФИО или почте без учёта
                     регистра, `status` — оставляет один статус. Оба необязательны.""")
-    @ApiResponse(responseCode = "400", description = "Неизвестный статус или размер страницы вне 1–100", content = @Content)
+    @ApiResponse(responseCode = "400", description = "Неизвестный статус, номер страницы вне 0–100000 или размер вне 1–100", content = @Content)
     public UserPage listUsers(@RequestParam(required = false) String query,
                               @RequestParam(required = false) UserStatus status,
-                              @RequestParam(defaultValue = "0") @Min(0) int page,
+                              @RequestParam(defaultValue = "0") @Min(0) @Max(MAX_PAGE) int page,
                               @RequestParam(defaultValue = "20") @Min(1) @Max(MAX_PAGE_SIZE) int size) {
         return UserPage.of(adminUsers.list(query, status, PageRequest.of(page, size, Sort.by("email"))));
     }
