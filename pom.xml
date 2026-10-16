@@ -182,6 +182,11 @@
                     <workingDirectory>frontend</workingDirectory>
                     <!-- Node кладём в target/, а не в исходники: mvn clean уберёт и его. -->
                     <installDirectory>${project.build.directory}</installDirectory>
+                    <environmentVariables>
+                        <!-- Совет «вышла новая версия npm» npm пишет в поток ошибок, и в логе Maven
+                             он выглядит как [ERROR]. На сборку не влияет — просто сбивает с толку. -->
+                        <NPM_CONFIG_UPDATE_NOTIFIER>false</NPM_CONFIG_UPDATE_NOTIFIER>
+                    </environmentVariables>
                 </configuration>
                 <executions>
                     <execution>
