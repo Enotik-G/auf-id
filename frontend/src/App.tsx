@@ -39,7 +39,7 @@ export default function App() {
     <MeContext.Provider value={me}>
       <Routes>
         <Route element={<Layout />}>
-          {/* На сервере / — своя страница AUF ID; сюда попадают только при разработке (Vite). */}
+          {/* На сервере / перенаправляет сюда же сам Spring (HomePageController); этот маршрут — для разработки в Vite. */}
           <Route path="/" element={<Navigate to="/account" replace />} />
           <Route path="/account" element={<ProfilePage />} />
           <Route path="/account/password" element={<PasswordPage />} />
