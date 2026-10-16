@@ -10,8 +10,10 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
@@ -72,6 +74,8 @@ public class MeController {
             description = "`reason`: `WRONG_CURRENT_PASSWORD`, `WRONG_LENGTH` (нужно 12–128 символов) "
                     + "или `COMMON` (пароль из списка утёкших)")
     @ApiResponse(responseCode = "401", description = "Не выполнен вход", content = @Content)
+    @ApiResponse(responseCode = "429",
+            description = "5 неверных текущих паролей за 15 минут: смена закрыта, сколько ждать — в `Retry-After`")
     public void changePassword(@Valid @RequestBody ChangePasswordRequest body, Authentication authentication,
                                HttpServletRequest request, HttpServletResponse response) {
         UUID userId = UUID.fromString(authentication.getName());
@@ -109,6 +113,15 @@ public class MeController {
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public ProblemDetail wrongCurrentPassword(WrongCurrentPasswordException e) {
         return badRequest(e.getMessage(), "WRONG_CURRENT_PASSWORD");
+    }
+
+    @ExceptionHandler(TooManyPasswordAttemptsException.class)
+    public ResponseEntity<ProblemDetail> tooManyAttempts(TooManyPasswordAttemptsException e) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.TOO_MANY_REQUESTS, e.getMessage());
+        problem.setProperty("reason", "TOO_MANY_ATTEMPTS");
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header(HttpHeaders.RETRY_AFTER, String.valueOf(e.retryAfter().toSeconds()))
+                .body(problem);
     }
 
     @ExceptionHandler(WeakPasswordException.class)

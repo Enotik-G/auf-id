@@ -35,6 +35,7 @@ public class PasswordService {
     private final PasswordHasher passwordHasher;
     private final UserAuthorizationRevoker authorizationRevoker;
     private final Clock clock;
+    private final PasswordChangeAttempts changeAttempts;
 
     /**
      * Правила пароля проверяются здесь, а не у вызывающего: тогда ни смена, ни сброс не смогут их
@@ -54,16 +55,25 @@ public class PasswordService {
      * <p>Вошедшему этого мало: сессию могли оставить открытой в компьютерном классе, и без
      * текущего пароля любой подошедший сменил бы его и забрал учётку себе.
      *
+     * <p>Неверные текущие пароли считаются ({@link PasswordChangeAttempts}). Redis не участвует в
+     * транзакции БД, поэтому неудача записывается, хотя исключение и откатит транзакцию, — так и нужно.
+     *
+     * @throws TooManyPasswordAttemptsException если неверных попыток уже слишком много
      * @throws WrongCurrentPasswordException если текущий пароль неверен
      * @throws WeakPasswordException если новый пароль не проходит {@link PasswordPolicy}
      */
     @Transactional
     public void changePassword(UUID userId, String currentRawPassword, String newRawPassword) {
+        changeAttempts.lockedFor(userId).ifPresent(wait -> {
+            throw new TooManyPasswordAttemptsException(wait);
+        });
         PasswordCredential credential = credentialOf(userId);
         if (!passwordHasher.matches(currentRawPassword, credential.getPasswordHash())) {
+            changeAttempts.recordFailure(userId);
             throw new WrongCurrentPasswordException();
         }
         replace(credential, newRawPassword);
+        changeAttempts.reset(userId);
     }
 
     private PasswordCredential credentialOf(UUID userId) {

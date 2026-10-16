@@ -52,6 +52,10 @@ class PasswordServiceTest {
     @MockitoBean
     private UserAuthorizationRevoker authorizationRevoker;
 
+    /** Счётчик попыток живёт в Redis, его проверяет PasswordChangeTest; заглушка всегда «можно». */
+    @MockitoBean
+    private PasswordChangeAttempts changeAttempts;
+
     private User student;
 
     @BeforeEach
