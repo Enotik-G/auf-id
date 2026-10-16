@@ -16,6 +16,10 @@
     <properties>
         <java.version>25</java.version>
         <bucket4j.version>8.20.0</bucket4j.version>
+        <frontend-maven-plugin.version>2.0.2</frontend-maven-plugin.version>
+        <!-- Node, которым Maven собирает веб-интерфейс (frontend/). Свой, скачанный плагином:
+             установленный на машине не нужен и не влияет на сборку. -->
+        <node.version>v22.22.1</node.version>
     </properties>
     <dependencies>
         <dependency>
@@ -163,6 +167,73 @@
                                     <artifactId>lombok</artifactId>
                                 </path>
                             </annotationProcessorPaths>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <!-- Веб-интерфейс (frontend/: React + Vite) собирается вместе с приложением: Maven сам
+                 скачивает Node, ставит пакеты и запускает сборку. Результат — frontend/dist.
+                 Пропустить (быстрая сборка только Java): -Dskip.installnodenpm -Dskip.npm -->
+            <plugin>
+                <groupId>com.github.eirslett</groupId>
+                <artifactId>frontend-maven-plugin</artifactId>
+                <version>${frontend-maven-plugin.version}</version>
+                <configuration>
+                    <workingDirectory>frontend</workingDirectory>
+                    <!-- Node кладём в target/, а не в исходники: mvn clean уберёт и его. -->
+                    <installDirectory>${project.build.directory}</installDirectory>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>install-node-and-npm</id>
+                        <goals>
+                            <goal>install-node-and-npm</goal>
+                        </goals>
+                        <configuration>
+                            <nodeVersion>${node.version}</nodeVersion>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <!-- ci, а не install: ставит ровно то, что записано в package-lock.json. -->
+                        <id>npm-ci</id>
+                        <goals>
+                            <goal>npm</goal>
+                        </goals>
+                        <configuration>
+                            <arguments>ci --no-audit --no-fund</arguments>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>npm-run-build</id>
+                        <goals>
+                            <goal>npm</goal>
+                        </goals>
+                        <configuration>
+                            <arguments>run build</arguments>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <!-- Собранный интерфейс — в static/ внутри jar: Spring отдаёт его как обычную статику.
+                 Отдельным копированием, а не своей секцией <resources>: та переопределила бы
+                 настройки ресурсов из родительского pom Spring Boot. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-resources-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>copy-frontend</id>
+                        <phase>process-resources</phase>
+                        <goals>
+                            <goal>copy-resources</goal>
+                        </goals>
+                        <configuration>
+                            <outputDirectory>${project.build.outputDirectory}/static</outputDirectory>
+                            <resources>
+                                <resource>
+                                    <directory>frontend/dist</directory>
+                                </resource>
+                            </resources>
                         </configuration>
                     </execution>
                 </executions>
