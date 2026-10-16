@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -31,6 +32,16 @@ public interface UserRepository extends JpaRepository<User, UUID> {
                    ru.auf.id.user.UserStatus.DELETED)
             """)
     long countUsableWithRole(@Param("role") Role role);
+
+    /**
+     * Когда пользователю последний раз ставили пароль (активация, смена, сброс). Пусто, если пароля
+     * нет — например, учётка ещё не активирована.
+     *
+     * <p>Живёт здесь, а не в {@link PasswordCredentialRepository}, потому что нужно фильтру сессий
+     * вместе с самим пользователем: так фильтру хватает одного репозитория.
+     */
+    @Query("select credential.changedAt from PasswordCredential credential where credential.userId = :userId")
+    Optional<Instant> findPasswordChangedAt(@Param("userId") UUID userId);
 
     /**
      * Страница пользователей для админки: по подстроке в ФИО или почте и по статусу.
