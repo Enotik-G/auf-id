@@ -1,4 +1,4 @@
-import type { Role, UserStatus } from './types'
+import type { ClientKind, Role, UserStatus } from './types'
 
 // Как показывать человеку то, что API отдаёт в «машинном» виде.
 
@@ -29,6 +29,20 @@ export function statusLabel(status: UserStatus): string {
 
 /** Все статусы по порядку — для списка в фильтре. */
 export const USER_STATUSES = Object.keys(STATUS_LABELS) as UserStatus[]
+
+const CLIENT_KIND_LABELS: Record<ClientKind, string> = {
+  BROWSER: 'Браузерное приложение',
+  NATIVE: 'Настольное приложение',
+  CONFIDENTIAL: 'Серверное приложение',
+  SERVICE: 'Сервис без пользователя',
+}
+
+export function clientKindLabel(kind: ClientKind): string {
+  return CLIENT_KIND_LABELS[kind]
+}
+
+/** Все виды клиентов по порядку — для выбора при регистрации. */
+export const CLIENT_KINDS = Object.keys(CLIENT_KIND_LABELS) as ClientKind[]
 
 /**
  * «16 октября 2026 г. в 12:00» из «2026-10-16T09:00:00Z».

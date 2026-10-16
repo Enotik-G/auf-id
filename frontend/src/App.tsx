@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Navigate, Outlet, Route, Routes } from 'react-router'
+import { Navigate, Route, Routes } from 'react-router'
 import { Layout } from '@/components/Layout'
 import { api } from '@/lib/api'
 import { isAdmin, MeContext } from '@/lib/me'
@@ -7,6 +7,8 @@ import type { Me } from '@/lib/types'
 import { NotFoundPage } from '@/pages/NotFoundPage'
 import { PasswordPage } from '@/pages/account/PasswordPage'
 import { ProfilePage } from '@/pages/account/ProfilePage'
+import { AdminLayout } from '@/pages/admin/AdminLayout'
+import { ClientsPage } from '@/pages/admin/ClientsPage'
 import { UserDetailsPage } from '@/pages/admin/UserDetailsPage'
 import { UsersPage } from '@/pages/admin/UsersPage'
 
@@ -41,11 +43,12 @@ export default function App() {
           <Route path="/" element={<Navigate to="/account" replace />} />
           <Route path="/account" element={<ProfilePage />} />
           <Route path="/account/password" element={<PasswordPage />} />
-          {/* Все страницы /admin/… — внутри одной проверки: <Outlet /> рисует вложенную страницу. */}
-          <Route path="/admin" element={isAdmin(me) ? <Outlet /> : <NotFoundPage />}>
+          {/* Все страницы /admin/… — внутри одной проверки; AdminLayout рисует вкладки и вложенную страницу. */}
+          <Route path="/admin" element={isAdmin(me) ? <AdminLayout /> : <NotFoundPage />}>
             <Route index element={<Navigate to="/admin/users" replace />} />
             <Route path="users" element={<UsersPage />} />
             <Route path="users/:userId" element={<UserDetailsPage />} />
+            <Route path="clients" element={<ClientsPage />} />
           </Route>
           <Route path="*" element={<NotFoundPage />} />
         </Route>

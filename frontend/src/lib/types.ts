@@ -48,3 +48,22 @@ export interface PasswordResetLinkResponse {
   userId: string
   passwordResetLink: string
 }
+
+/** Вид клиента — admin/ClientKind.java. Из него сервер выводит все настройки OAuth. */
+export type ClientKind = 'NATIVE' | 'BROWSER' | 'CONFIDENTIAL' | 'SERVICE'
+
+/** Зарегистрированный сервис — admin/ClientSummary.java. Секрета здесь нет: сервер хранит только хеш. */
+export interface ClientSummary {
+  clientId: string
+  name: string
+  kind: ClientKind
+  redirectUris: string[]
+  scopes: string[]
+  registeredAt: string
+}
+
+/** Клиент и его секрет — admin/ClientCredentials.java. secret === null у BROWSER. */
+export interface ClientCredentials {
+  clientId: string
+  secret: string | null
+}
