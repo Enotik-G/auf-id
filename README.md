@@ -505,6 +505,46 @@ curl -s -H "Authorization: Bearer ACCESS_TOKEN" http://localhost:8080/userinfo
 
 ## Деплой
 
+Сервер поднимается из папки [`deploy/`](deploy/): AUF ID (готовый образ из GHCR), Postgres 18,
+Redis с сохранением на диск и Caddy, который сам получает сертификат Let's Encrypt. Исходники на
+сервере не нужны.
+
+### День деплоя
+
+На сервере нужны Docker с плагином `compose`, домен, указывающий на сервер (запись `A` в DNS), и
+открытые порты 80 и 443.
+
+1. **Скопировать `deploy/` на сервер** — или `git clone` и работать в `auf-id/deploy`:
+   ```bash
+   scp -r deploy user@server:~/auf-id
+   ```
+2. **Настройки:**
+   ```bash
+   cd ~/auf-id && cp .env.example .env && chmod 600 .env && nano .env
+   ```
+   Заполнить по подсказкам в файле: `AUF_ID_DOMAIN`, `AUF_ID_IMAGE_TAG` (лучше конкретный
+   `sha-…`), `DB_PASSWORD`, `PASSWORD_PEPPER`, `CAPTCHA_SECRET`, `JWT_SIGNING_KEY` — **сгенерировать
+   на сервере** командами из файла и сохранить копию в менеджере паролей, — `BOOTSTRAP_ADMIN_EMAILS`,
+   при браузерном планировщике — `AUTH_CORS_ALLOWED_ORIGINS`.
+3. **Запустить:**
+   ```bash
+   docker compose up -d && docker compose logs -f auf-id
+   ```
+   В логе — ссылка активации первого администратора: открыть, задать пароль, войти.
+4. **Проверить:** `https://<домен>/.well-known/openid-configuration` — `issuer` равен
+   `https://<домен>`; `http://` перенаправляется на `https://`.
+
+**Обновить** до новой версии — поменять `AUF_ID_IMAGE_TAG` в `.env`, затем
+`docker compose pull && docker compose up -d`. **Откатить** — вернуть прежний тег, то же самое.
+
+**Проверить у себя до сервера:** `AUF_ID_DOMAIN=localhost` — стенд поднимется на
+`https://localhost` с сертификатом от локального центра Caddy (браузер предупредит).
+
+Что `deploy/compose.yaml` задаёт сам и в `.env` не нужно: `AUTH_PUBLIC_URL` (из домена),
+адреса Postgres и Redis, `FORWARD_HEADERS_STRATEGY=native` и `TRUSTED_PROXIES` (адрес Caddy
+закреплён — `172.30.0.10`), `SESSION_COOKIE_SECURE=true`, `AUTH_CSRF_COOKIE_NAME=__Host-XSRF-TOKEN`,
+`AUTH_DEV_CLIENT_ENABLED=false`. Эти значения сильнее `.env` — опечатка их не перебьёт.
+
 ### Сборка
 
 ```bash
@@ -549,17 +589,20 @@ docker run -d --name auf-id -p 8080:8080 --env-file <файл с настрой�
 
 ### Чек-лист перед запуском
 
+Пункты с пометкой *(deploy/)* `deploy/compose.yaml` выполняет сам — проверять их нужно, только если
+запускаете без него.
+
 - [ ] Сгенерированы **новые** `PASSWORD_PEPPER`, `CAPTCHA_SECRET`, `JWT_SIGNING_KEY` (не локальные!), хранятся в менеджере секретов, не в коде.
-- [ ] `AUTH_PUBLIC_URL` = настоящий адрес по HTTPS (от него зависят `iss` токенов и ссылки активации).
-- [ ] `SESSION_COOKIE_SECURE=true` и `AUTH_CSRF_COOKIE_NAME=__Host-XSRF-TOKEN` (без второго приложение не стартует).
+- [ ] `AUTH_PUBLIC_URL` = настоящий адрес по HTTPS (от него зависят `iss` токенов и ссылки активации). *(deploy/ — из `AUF_ID_DOMAIN`)*
+- [ ] `SESSION_COOKIE_SECURE=true` и `AUTH_CSRF_COOKIE_NAME=__Host-XSRF-TOKEN` (без второго приложение не стартует). *(deploy/)*
 - [ ] `AUTH_ALLOWED_EMAIL_DOMAINS` — домен(ы) колледжа (умолчание `sinhub.ru`).
 - [ ] `AUTH_LOGIN_RATE_LIMIT` подобран под сеть колледжа (умолчание 300 — смотреть по логам).
 - [ ] Текст согласия на обработку ПДн (`templates/consent/personal-data.html`) согласован с колледжем, версия поднята.
 - [ ] `BOOTSTRAP_ADMIN_EMAILS` — почта первого администратора; после первого старта взять ссылку активации из лога (см. «Первый администратор»).
-- [ ] `AUTH_DEV_CLIENT_ENABLED` **не** включён.
-- [ ] Свой пароль БД (`DB_PASSWORD`), адрес БД (`SPRING_DATASOURCE_URL`).
+- [ ] `AUTH_DEV_CLIENT_ENABLED` **не** включён. *(deploy/)*
+- [ ] Свой пароль БД (`DB_PASSWORD`); без `deploy/` — и адрес БД (`DB_HOST`).
 - [ ] Решено, нужен ли Swagger снаружи (`SPRINGDOC_*_ENABLED=false`).
-- [ ] **Прокси и IP** (шаг 20): `FORWARD_HEADERS_STRATEGY=native` и `TRUSTED_PROXIES=<адрес прокси>/32`.
+- [ ] **Прокси и IP** (шаг 20): `FORWARD_HEADERS_STRATEGY=native` и `TRUSTED_PROXIES=<адрес прокси>/32`. *(deploy/)*
       Без первого все пользователи попадут в один лимит — за прокси приложение видит адрес прокси, а не
       человека. Без второго лимит обходится подделкой `X-Forwarded-For`: умолчание Tomcat доверяет **всем**
       частным сетям, то есть в Docker — любому контейнеру. Поэтому здесь сужено до loopback, а на сервере
